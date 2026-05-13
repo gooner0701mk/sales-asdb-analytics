@@ -1,0 +1,101 @@
+.cloud-login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--accent) 12%, var(--bg, #f8fafc)) 0%,
+    var(--bg, #f8fafc) 45%
+  );
+}
+
+.cloud-login-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 1.75rem 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+}
+
+.cloud-login-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+}
+
+.cloud-login-lead {
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.cloud-login-seg {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.cloud-login-seg-btn {
+  flex: 1;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.cloud-login-seg-btn:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.cloud-login-seg-btn.active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.cloud-login-form .field {
+  margin-bottom: 0.85rem;
+}
+
+.cloud-login-submit {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.cloud-login-message {
+  margin: 1rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-strong);
+}
+
+.cloud-login-foot {
+  margin: 1.25rem 0 0;
+  line-height: 1.5;
+}
+
+.app-auth-loading {
+  min-height: 40vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.app-data-loading {
+  min-height: 40vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}

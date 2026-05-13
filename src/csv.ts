@@ -1,5 +1,6 @@
 import type { ActivityLog, ActivityType } from './types'
 import { parseLeadSource } from './types'
+import { createId } from './createId'
 
 const ACT_HEADER =
   'date,customerName,leadSource,activityType,quoteCount,orderCount,userId'
@@ -78,7 +79,7 @@ export function parseActivityCSV(
     const leadRaw =
       iLead >= 0 ? parseLeadSource((cols[iLead] ?? '').trim()) : null
     out.push({
-      id: crypto.randomUUID(),
+      id: createId(),
       userId: uid,
       date,
       customerName: (cols[iCust] ?? '').trim() || '（名称なし）',

@@ -33,10 +33,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    void sb.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s)
-      setReady(true)
-    })
+    void sb.auth
+      .getSession()
+      .then(({ data: { session: s } }) => {
+        setSession(s)
+        setReady(true)
+      })
+      .catch((err) => {
+        console.error('[AuthProvider] getSession', err)
+        setReady(true)
+      })
 
     const {
       data: { subscription },
@@ -50,15 +56,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     const sb = getSupabase()
     if (!sb) return { error: 'Supabase が未設定です' }
-    const { error } = await sb.auth.signInWithPassword({ email, password })
-    return { error: error?.message ?? null }
+    try {
+      const { error } = await sb.auth.signInWithPassword({ email, password })
+      return { error: error?.message ?? null }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { error: `通信エラー: ${msg}` }
+    }
   }, [])
 
   const signUp = useCallback(async (email: string, password: string) => {
     const sb = getSupabase()
     if (!sb) return { error: 'Supabase が未設定です' }
-    const { error } = await sb.auth.signUp({ email, password })
-    return { error: error?.message ?? null }
+    try {
+      const { error } = await sb.auth.signUp({ email, password })
+      return { error: error?.message ?? null }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { error: `通信エラー: ${msg}` }
+    }
   }, [])
 
   const signOut = useCallback(async () => {

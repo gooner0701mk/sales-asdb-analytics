@@ -1,5 +1,6 @@
 import type { ChartColorPalette } from './chartColors'
 import { DEFAULT_CHART_COLORS } from './chartColors'
+import { createId } from './createId'
 
 /** 1回の営業活動ログ */
 export type ActivityType = 'coldVisit' | 'teleAppo' | 'meeting' | 'reception'
@@ -149,7 +150,7 @@ export function newApproachTarget(
   lastApproachDate: string | null = null,
 ): ApproachTarget {
   return {
-    id: crypto.randomUUID(),
+    id: createId(),
     companyName: companyName.trim() || '（名称なし）',
     ownerUserId,
     lastApproachDate,
@@ -179,7 +180,7 @@ export function newInvoice(
   memo = '',
 ): Invoice {
   return {
-    id: crypto.randomUUID(),
+    id: createId(),
     invoiceDate,
     clientName: clientName.trim() || '（取引先なし）',
     amountYen: Math.max(0, Math.round(amountYen)),
@@ -249,7 +250,7 @@ export const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = {
 }
 
 export function newUser(name: string): User {
-  return { id: crypto.randomUUID(), name: name.trim() || '無名' }
+  return { id: createId(), name: name.trim() || '無名' }
 }
 
 export function emptyMilestones(): UserMilestones {

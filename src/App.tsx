@@ -25,6 +25,7 @@ import {
   approachTargetsListEqual,
   syncApproachTargetsFromActivities,
 } from './approachTargets'
+import { createId } from './createId'
 import { aggregateByMonth, filterActivities } from './aggregate'
 import {
   activitiesToCSV,
@@ -97,6 +98,7 @@ import {
   emptyState,
   newUser,
 } from './types'
+import { useMediaQuery } from './useMediaQuery'
 import './App.css'
 
 const MIN_FOCUS_MONTH_YM = '2000-01'
@@ -260,6 +262,7 @@ function DashboardApp({
 
   type PageTab = 'dashboard' | 'targets' | 'invoices' | 'settings'
   const [pageTab, setPageTab] = useState<PageTab>('dashboard')
+  const narrowLayout = useMediaQuery('(max-width: 960px)')
 
   useEffect(() => {
     document.title =
@@ -775,7 +778,7 @@ function DashboardApp({
     const quoteCount = Math.max(0, Math.round(formQuote))
     const orderCount = Math.max(0, Math.round(formOrder))
     const row: ActivityLog = {
-      id: crypto.randomUUID(),
+      id: createId(),
       userId: sessionUserId,
       date: formDate,
       customerName: name,
@@ -1161,8 +1164,10 @@ function DashboardApp({
       </div>
 
       <div className="layout-main">
-        <aside className="sidebar" aria-label="営業活動の入力">
-          <div className="panel side-form">
+        {(() => {
+          const activitySidebarPanels = (
+            <>
+              <div className="panel side-form">
             <h2 className="side-title">活動を記録</h2>
             <p className="hint small">
               登録先：<strong>{sessionUser?.name ?? '未選択'}</strong>
@@ -1322,7 +1327,25 @@ function DashboardApp({
               })}
             </ul>
           </div>
-        </aside>
+            </>
+          )
+          return (
+            <aside className="sidebar" aria-label="営業活動の入力">
+              {narrowLayout ? (
+                <details className="mobile-input-drawer" open>
+                  <summary className="mobile-input-drawer-summary">
+                    活動の記録・一覧（タップで開閉）
+                  </summary>
+                  <div className="mobile-input-drawer-body">
+                    {activitySidebarPanels}
+                  </div>
+                </details>
+              ) : (
+                activitySidebarPanels
+              )}
+            </aside>
+          )
+        })()}
 
         <div className="main-column">
           {showMilestones ? (
@@ -2204,5 +2227,18 @@ export default function App() {
   if (auth.configured && !auth.user) {
     return <CloudLoginScreen />
   }
-  return <AppMain />
+  return (
+    <>
+      {!auth.configured && import.meta.env.PROD && (
+        <div className="app-prod-missing-supabase-banner" role="status">
+          本番ビルドに{' '}
+          <code>VITE_SUPABASE_URL</code> / <code>VITE_SUPABASE_ANON_KEY</code>{' '}
+          が含まれていないため、クラウドログインは表示されません。Vercel の
+          Environment Variables で <strong>Production</strong>{' '}
+          にチェックを入れて保存し、<strong>Redeploy</strong>（再デプロイ）してください。
+        </div>
+      )}
+      <AppMain />
+    </>
+  )
 }

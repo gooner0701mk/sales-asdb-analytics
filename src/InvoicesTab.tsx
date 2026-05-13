@@ -36,6 +36,7 @@ import { dataViewShowsOwnerColumn } from './dataViewSelection'
 import { InvoiceRevenueTargetSidebar } from './InvoiceRevenueTargetSidebar'
 import { SectionErrorBoundary } from './SectionErrorBoundary'
 import { useInvoiceCalendarPeriodAutoSync } from './useInvoiceCalendarPeriodAutoSync'
+import { useMediaQuery } from './useMediaQuery'
 import type {
   AppState,
   CompanySettings,
@@ -180,6 +181,8 @@ export function InvoicesTab({
       ? Math.round((myTotalInPeriod / teamTotalInPeriod) * 1000) / 10
       : null
 
+  const narrowLayout = useMediaQuery('(max-width: 960px)')
+
   const pieByUser = useMemo(
     () =>
       byUserRows
@@ -299,15 +302,35 @@ export function InvoicesTab({
         setState={setState}
       />
       <div className="invoices-tab-split">
-        <InvoiceRevenueTargetSidebar
-          users={users}
-          invoices={invoices}
-          targets={invoiceAnnualRevenueTargets}
-          setState={setState}
-          showToast={showToast}
-          companySettings={companySettings}
-        />
+        {narrowLayout ? (
+          <details className="mobile-input-drawer" open>
+            <summary className="mobile-input-drawer-summary">
+              年次売上目標の入力（タップで開閉）
+            </summary>
+            <div className="mobile-input-drawer-body mobile-input-drawer-body--flush">
+              <InvoiceRevenueTargetSidebar
+                users={users}
+                invoices={invoices}
+                targets={invoiceAnnualRevenueTargets}
+                setState={setState}
+                showToast={showToast}
+                companySettings={companySettings}
+              />
+            </div>
+          </details>
+        ) : (
+          <InvoiceRevenueTargetSidebar
+            users={users}
+            invoices={invoices}
+            targets={invoiceAnnualRevenueTargets}
+            setState={setState}
+            showToast={showToast}
+            companySettings={companySettings}
+          />
+        )}
         <div className="invoices-tab-main">
+      {(() => {
+        const invoiceIntroPanel = (
       <section className="panel">
         <h2 className="targets-heading">売上データ（請求ベース）</h2>
         <p className="hint">
@@ -386,6 +409,18 @@ export function InvoicesTab({
           </button>
         </form>
       </section>
+        )
+        return narrowLayout ? (
+          <details className="mobile-input-drawer" open>
+            <summary className="mobile-input-drawer-summary">
+              請求データの追加・説明（タップで開閉）
+            </summary>
+            <div className="mobile-input-drawer-body">{invoiceIntroPanel}</div>
+          </details>
+        ) : (
+          invoiceIntroPanel
+        )
+      })()}
 
       <section className="panel targets-table-panel">
         <div className="invoices-period-bar" role="group" aria-label="集計期間">

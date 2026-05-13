@@ -1,6 +1,13 @@
-import { useCallback, useState, type FormEvent } from 'react'
+import { useCallback, useMemo, useState, type FormEvent } from 'react'
 import { useAuth } from './AuthContext'
 import './CloudLoginScreen.css'
+
+function isLanOrLocalHostname(hostname: string): boolean {
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return true
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true
+  return /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname)
+}
 
 export function CloudLoginScreen() {
   const { signIn, signUp } = useAuth()
@@ -9,6 +16,13 @@ export function CloudLoginScreen() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const lanRedirectHint = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    const { hostname, origin } = window.location
+    if (!isLanOrLocalHostname(hostname)) return null
+    return `${origin}/**`
+  }, [])
 
   const onSubmit = useCallback(
     async (e: FormEvent) => {
@@ -94,7 +108,26 @@ export function CloudLoginScreen() {
             {busy ? '処理中…' : mode === 'login' ? 'ログイン' : '登録する'}
           </button>
         </form>
-        {message ? <p className="cloud-login-message">{message}</p> : null}
+        {message ? (
+          <p className="cloud-login-message" role="alert">
+            {message}
+          </p>
+        ) : null}
+        {lanRedirectHint ? (
+          <div className="cloud-login-lan-hint" role="note">
+            <strong>スマホや LAN の IP で開いているとき:</strong>
+            Supabase の{' '}
+            <strong>Authentication → URL Configuration → Redirect URLs</strong>{' '}
+            に次を<strong>1行追加</strong>してください（コピー用）。
+            <br />
+            <code className="cloud-login-lan-code">{lanRedirectHint}</code>
+            <span className="cloud-login-lan-sub">
+              IP やポートは PC のターミナル（
+              <code>Network: http://…</code>
+              ）と一致させてください。メール確認リンクやパスワード再設定でも同じオリジンが使われます。
+            </span>
+          </div>
+        ) : null}
         <p className="hint small cloud-login-foot">
           開発時は <code>.env</code> の <code>VITE_SUPABASE_URL</code> /{' '}
           <code>VITE_SUPABASE_ANON_KEY</code> を設定し、Supabase でテーブルと RLS を作成してください（

@@ -10,6 +10,7 @@ import type {
   User,
   UserMilestones,
 } from './types'
+import { createId } from './createId'
 import { isoDaysAgo } from './dates'
 import {
   DEFAULT_COMPANY_SETTINGS,
@@ -304,7 +305,7 @@ export function sampleState(): AppState {
     orderCount: number,
     leadSource: LeadSource | null = null,
   ): ActivityLog => ({
-    id: crypto.randomUUID(),
+    id: createId(),
     userId,
     date: isoDaysAgo(daysAgo),
     customerName,
@@ -339,7 +340,7 @@ export function sampleState(): AppState {
     clientName: string,
     amountYen: number,
   ): Invoice => ({
-    id: crypto.randomUUID(),
+    id: createId(),
     invoiceDate: isoDaysAgo(daysAgo),
     clientName,
     amountYen,

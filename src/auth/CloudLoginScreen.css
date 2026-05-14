@@ -21,6 +21,10 @@
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
 }
 
+.cloud-login-card-await {
+  max-width: 32rem;
+}
+
 .cloud-login-title {
   margin: 0 0 0.5rem;
   font-size: 1.35rem;
@@ -77,6 +81,59 @@
   font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--text-strong);
+}
+
+.cloud-login-email-await {
+  margin: 1rem 0 0;
+  padding: 1rem 1rem 1.1rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 10px;
+}
+
+.cloud-login-email-await-lan {
+  background: color-mix(in srgb, #f59e0b 12%, var(--surface));
+  border-color: color-mix(in srgb, #f59e0b 35%, var(--border));
+}
+
+.cloud-login-email-await-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.cloud-login-email-await-lead {
+  margin: 0 0 0.65rem;
+  color: var(--text-muted);
+}
+
+.cloud-login-email-await-list {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.cloud-login-email-await-list li {
+  margin-bottom: 0.45rem;
+}
+
+.cloud-login-email-await-list li:last-child {
+  margin-bottom: 0;
+}
+
+.cloud-login-email-await-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.cloud-login-resend {
+  flex: 1 1 11rem;
+  min-width: 0;
 }
 
 .cloud-login-lan-hint {

@@ -6,6 +6,7 @@ import {
   normalizeHex,
   type ChartColorPalette,
 } from './chartColors'
+import { EstimateTasksTab } from './EstimateTasksTab'
 import { InvoicesTab } from './InvoicesTab'
 import { SettingsTab } from './SettingsTab'
 import { TargetsTab } from './TargetsTab'
@@ -152,18 +153,40 @@ function SettingsGearIcon() {
   )
 }
 
+type CloudSavePhase = 'idle' | 'syncing' | 'ok' | 'error'
+
+function formatCloudSavedAt(ts: number): string {
+  return new Date(ts).toLocaleString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
 function usePersistentAppState(): {
   state: AppState
   setState: Dispatch<SetStateAction<AppState>>
   toast: string | null
   showToast: (msg: string) => void
   dataReady: boolean
+  cloudSave: { phase: CloudSavePhase; lastOkAt: number | null }
+  forceCloudSave: () => Promise<void>
 } {
   const auth = useAuth()
   const [state, setState] = useState<AppState>(() =>
     !isSupabaseConfigured ? initialState() : emptyState(),
   )
   const [dataReady, setDataReady] = useState(!isSupabaseConfigured)
+  const [cloudSave, setCloudSave] = useState<{
+    phase: CloudSavePhase
+    lastOkAt: number | null
+  }>({ phase: 'idle', lastOkAt: null })
+  const stateRef = useRef(state)
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   useEffect(() => {
     if (!auth.ready) return
@@ -210,12 +233,24 @@ function usePersistentAppState(): {
     }
     const userId = auth.user?.id
     if (!userId) return
+    let cancelled = false
     const id = window.setTimeout(() => {
-      void upsertUserAppState(userId, state).catch((err) => {
-        console.error(err)
-      })
+      if (cancelled) return
+      setCloudSave((s) => ({ ...s, phase: 'syncing' }))
+      void upsertUserAppState(userId, state).then(
+        () => {
+          if (!cancelled) setCloudSave({ phase: 'ok', lastOkAt: Date.now() })
+        },
+        (err) => {
+          console.error(err)
+          if (!cancelled) setCloudSave((s) => ({ phase: 'error', lastOkAt: s.lastOkAt }))
+        },
+      )
     }, 900)
-    return () => window.clearTimeout(id)
+    return () => {
+      cancelled = true
+      window.clearTimeout(id)
+    }
   }, [state, dataReady, auth.configured, auth.user?.id])
 
   const showToast = useCallback((msg: string) => {
@@ -223,7 +258,21 @@ function usePersistentAppState(): {
     window.setTimeout(() => setToast(null), 3200)
   }, [])
 
-  return { state, setState, toast, showToast, dataReady }
+  const forceCloudSave = useCallback(async () => {
+    if (!auth.configured || !auth.user?.id) return
+    setCloudSave((s) => ({ ...s, phase: 'syncing' }))
+    try {
+      await upsertUserAppState(auth.user.id, stateRef.current)
+      setCloudSave({ phase: 'ok', lastOkAt: Date.now() })
+      showToast('クラウドへ保存しました')
+    } catch (e) {
+      console.error(e)
+      setCloudSave((s) => ({ phase: 'error', lastOkAt: s.lastOkAt }))
+      showToast('クラウド保存に失敗しました')
+    }
+  }, [auth.configured, auth.user?.id, showToast])
+
+  return { state, setState, toast, showToast, dataReady, cloudSave, forceCloudSave }
 }
 
 function milestonesOf(state: AppState, userId: string | null) {
@@ -236,11 +285,15 @@ function DashboardApp({
   setState,
   toast,
   showToast,
+  cloudSave,
+  forceCloudSave,
 }: {
   state: AppState
   setState: Dispatch<SetStateAction<AppState>>
   toast: string | null
   showToast: (msg: string) => void
+  cloudSave: { phase: CloudSavePhase; lastOkAt: number | null }
+  forceCloudSave: () => Promise<void>
 }) {
   const auth = useAuth()
   const {
@@ -253,6 +306,7 @@ function DashboardApp({
     invoices,
     invoiceAnnualRevenueTargets,
     companySettings,
+    estimateTasks,
   } = state
 
   const fiscalSm = companySettings.fiscalYearStartMonth
@@ -260,7 +314,7 @@ function DashboardApp({
   const milestoneUserId = dataViewSingleUserId(dataViewUserIds)
   const showMilestones = milestoneUserId !== null
 
-  type PageTab = 'dashboard' | 'targets' | 'invoices' | 'settings'
+  type PageTab = 'dashboard' | 'targets' | 'invoices' | 'estimates' | 'settings'
   const [pageTab, setPageTab] = useState<PageTab>('dashboard')
   const narrowLayout = useMediaQuery('(max-width: 960px)')
 
@@ -270,9 +324,11 @@ function DashboardApp({
         ? 'アプローチ先企業一覧｜営業データ分析'
         : pageTab === 'invoices'
           ? '売上データ（請求ベース）｜営業データ分析'
-          : pageTab === 'settings'
-            ? '設定｜営業データ分析'
-            : '営業データ分析'
+          : pageTab === 'estimates'
+            ? '見積もりタスク｜営業データ分析'
+            : pageTab === 'settings'
+              ? '設定｜営業データ分析'
+              : '営業データ分析'
   }, [pageTab])
 
   useEffect(() => {
@@ -1045,15 +1101,45 @@ function DashboardApp({
             全消去
           </button>
           {auth.configured ? (
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => {
-                void auth.signOut()
-              }}
-            >
-              ログアウト
-            </button>
+            <>
+              <span
+                className={`header-cloud-sync${
+                  cloudSave.phase === 'error' ? ' header-cloud-sync-error' : ''
+                }`}
+                title="自動保存は操作の約0.9秒後に実行されます"
+              >
+                {cloudSave.phase === 'syncing'
+                  ? 'クラウド保存中…'
+                  : cloudSave.phase === 'error'
+                    ? `前回の自動保存に失敗${
+                        cloudSave.lastOkAt != null
+                          ? `（最終成功 ${formatCloudSavedAt(cloudSave.lastOkAt)}）`
+                          : ''
+                      }`
+                    : cloudSave.lastOkAt != null
+                      ? `最終保存 ${formatCloudSavedAt(cloudSave.lastOkAt)}`
+                      : 'クラウド未保存（編集すると自動保存）'}
+              </span>
+              <button
+                type="button"
+                className="btn"
+                disabled={cloudSave.phase === 'syncing'}
+                onClick={() => {
+                  void forceCloudSave()
+                }}
+              >
+                今すぐ保存
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  void auth.signOut()
+                }}
+              >
+                ログアウト
+              </button>
+            </>
           ) : null}
         </div>
       </header>
@@ -1090,6 +1176,15 @@ function DashboardApp({
             onClick={() => setPageTab('invoices')}
           >
             売上データ（請求ベース）
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={pageTab === 'estimates'}
+            className={`app-tab ${pageTab === 'estimates' ? 'active' : ''}`}
+            onClick={() => setPageTab('estimates')}
+          >
+            見積もりタスク
           </button>
         </nav>
         <button
@@ -2147,7 +2242,8 @@ function DashboardApp({
               {auth.configured ? (
                 <>
                   ログイン中のデータは <strong>Supabase</strong> に保存されます（画面操作の約0.9秒後に自動同期）。
-                  バックアップ用に <strong>全状態JSON</strong> の書き出しも利用できます。
+                  ヘッダーの <strong>今すぐ保存</strong> で待たずに反映できます。バックアップ用に{' '}
+                  <strong>全状態JSON</strong> の書き出しも利用できます。
                 </>
               ) : (
                 <>
@@ -2184,6 +2280,16 @@ function DashboardApp({
           invoiceAnnualRevenueTargets={invoiceAnnualRevenueTargets}
           companySettings={companySettings}
         />
+      ) : pageTab === 'estimates' ? (
+        <EstimateTasksTab
+          estimateTasks={estimateTasks}
+          users={users}
+          sessionUserId={sessionUserId}
+          dataViewUserIds={dataViewUserIds}
+          setState={setState}
+          showToast={showToast}
+          companySettings={companySettings}
+        />
       ) : (
         <SettingsTab
           users={users}
@@ -2197,7 +2303,8 @@ function DashboardApp({
 }
 
 function AppMain() {
-  const { state, setState, toast, showToast, dataReady } = usePersistentAppState()
+  const { state, setState, toast, showToast, dataReady, cloudSave, forceCloudSave } =
+    usePersistentAppState()
   if (!dataReady) {
     return (
       <div className="app-auth-loading app-data-loading" role="status" aria-busy="true">
@@ -2211,6 +2318,8 @@ function AppMain() {
       setState={setState}
       toast={toast}
       showToast={showToast}
+      cloudSave={cloudSave}
+      forceCloudSave={forceCloudSave}
     />
   )
 }

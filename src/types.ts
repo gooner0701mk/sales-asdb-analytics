@@ -189,6 +189,78 @@ export function newInvoice(
   }
 }
 
+/** 見積書提出タスク（見積タブ） */
+export type EstimateTask = {
+  id: string
+  /** 案件名 */
+  projectName: string
+  /** 顧客名 */
+  customerName: string
+  /** 顧客担当者 */
+  customerContact: string
+  /** 見積もり担当（社内ユーザー） */
+  assigneeUserId: string
+  /** 提出期限 YYYY-MM-DD */
+  deadline: string
+  completed: boolean
+  /** 完了にした日（提出済み集計用）YYYY-MM-DD */
+  completedAt: string | null
+}
+
+export function newEstimateTask(
+  assigneeUserId: string,
+  deadline: string,
+  projectName: string,
+  customerName: string,
+  customerContact: string,
+): EstimateTask {
+  return {
+    id: createId(),
+    projectName: projectName.trim() || '（案件名なし）',
+    customerName: customerName.trim() || '（顧客名なし）',
+    customerContact: customerContact.trim(),
+    assigneeUserId,
+    deadline,
+    completed: false,
+    completedAt: null,
+  }
+}
+
+export function normalizeStoredEstimateTask(x: unknown): EstimateTask | null {
+  if (!x || typeof x !== 'object') return null
+  const r = x as Record<string, unknown>
+  if (typeof r.id !== 'string') return null
+  const deadline =
+    typeof r.deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.deadline)
+      ? r.deadline
+      : null
+  if (!deadline) return null
+  const completed = Boolean(r.completed)
+  let completedAt: string | null = null
+  if (
+    typeof r.completedAt === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(r.completedAt)
+  ) {
+    completedAt = r.completedAt
+  } else if (completed) {
+    completedAt = deadline
+  }
+  return {
+    id: r.id,
+    projectName:
+      typeof r.projectName === 'string' ? r.projectName : '（案件名なし）',
+    customerName:
+      typeof r.customerName === 'string' ? r.customerName : '（顧客名なし）',
+    customerContact:
+      typeof r.customerContact === 'string' ? r.customerContact : '',
+    assigneeUserId:
+      typeof r.assigneeUserId === 'string' ? r.assigneeUserId : '',
+    deadline,
+    completed,
+    completedAt: completed ? completedAt : null,
+  }
+}
+
 /** 1年度分の会社・担当ごとの請求売上目標 */
 export type InvoiceAnnualRevenueTargetBundle = {
   /** 各担当の年次目標の合計（保存時に自動設定。読込時も再計算で整合） */
@@ -240,6 +312,8 @@ export type AppState = {
   invoiceAnnualRevenueTargets: Record<string, InvoiceAnnualRevenueTargetBundle>
   /** ダッシュボードのグラフ色（ブラウザに保存） */
   chartColors: ChartColorPalette
+  /** 見積書提出タスク */
+  estimateTasks: EstimateTask[]
 }
 
 export const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = {
@@ -272,5 +346,6 @@ export function emptyState(): AppState {
     invoices: [],
     invoiceAnnualRevenueTargets: {},
     chartColors: { ...DEFAULT_CHART_COLORS },
+    estimateTasks: [],
   }
 }

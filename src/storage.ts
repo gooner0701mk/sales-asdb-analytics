@@ -5,6 +5,7 @@ import type {
   ApproachTarget,
   AppState,
   DataViewUserIds,
+  EstimateTask,
   Invoice,
   InvoiceAnnualRevenueTargetBundle,
   User,
@@ -18,6 +19,7 @@ import {
   newApproachTarget,
   newUser,
   normalizeStoredActivity,
+  normalizeStoredEstimateTask,
   type CompanySettings,
   type LeadSource,
 } from './types'
@@ -63,6 +65,7 @@ function migrateV4ToCurrent(v4: AppStateV4): AppState {
     invoiceAnnualRevenueTargets: {},
     companySettings: { ...DEFAULT_COMPANY_SETTINGS },
     chartColors: mergeChartColors(undefined),
+    estimateTasks: [],
   }
 }
 
@@ -136,6 +139,21 @@ function parseInvoicesFromRecord(o: Record<string, unknown>): Invoice[] {
     .filter((x): x is Invoice => x !== null)
 }
 
+function parseEstimateTasksFromRecord(
+  o: Record<string, unknown>,
+  users: User[],
+): EstimateTask[] {
+  const raw = o.estimateTasks
+  if (!Array.isArray(raw)) return []
+  const userIds = new Set(users.map((u) => u.id))
+  return raw
+    .map((x) => normalizeStoredEstimateTask(x))
+    .filter(
+      (t): t is EstimateTask =>
+        t !== null && t.assigneeUserId !== '' && userIds.has(t.assigneeUserId),
+    )
+}
+
 function normalizeDataViewUserIds(
   o: Record<string, unknown>,
   users: User[],
@@ -197,6 +215,7 @@ export function normalizeStoredStateRecord(o: Record<string, unknown>): AppState
   const invoices = parseInvoicesFromRecord(o)
   const invoiceAnnualRevenueTargets = parseInvoiceAnnualRevenueTargets(o)
   const companySettings = parseCompanySettings(o)
+  const estimateTasks = parseEstimateTasksFromRecord(o, users)
 
   let dataViewUserIds = normalizeDataViewUserIds(o, users, sessionUserId)
   if (dataViewUserIds !== 'all') {
@@ -216,6 +235,7 @@ export function normalizeStoredStateRecord(o: Record<string, unknown>): AppState
     invoiceAnnualRevenueTargets,
     companySettings,
     chartColors: mergeChartColors(o.chartColors),
+    estimateTasks,
   }
 }
 
@@ -388,6 +408,68 @@ export function sampleState(): AppState {
       newApproachTarget('フジパーツ', sato.id, null),
     ],
     invoiceAnnualRevenueTargets: {},
+    estimateTasks: [
+      {
+        id: createId(),
+        projectName: '期限超過（点滅）',
+        customerName: '中央スチール',
+        customerContact: '鈴木',
+        assigneeUserId: yamada.id,
+        deadline: isoDaysAgo(2),
+        completed: false,
+        completedAt: null,
+      },
+      {
+        id: createId(),
+        projectName: '提出当日（点滅）',
+        customerName: 'イースト商事',
+        customerContact: '高橋主任',
+        assigneeUserId: sato.id,
+        deadline: isoDaysAgo(0),
+        completed: false,
+        completedAt: null,
+      },
+      {
+        id: createId(),
+        projectName: '1日前（赤）',
+        customerName: 'グリーン建設',
+        customerContact: '佐藤',
+        assigneeUserId: yamada.id,
+        deadline: isoDaysAgo(-1),
+        completed: false,
+        completedAt: null,
+      },
+      {
+        id: createId(),
+        projectName: '2日前（黄）',
+        customerName: 'サンプル商事',
+        customerContact: '田中',
+        assigneeUserId: sato.id,
+        deadline: isoDaysAgo(-2),
+        completed: false,
+        completedAt: null,
+      },
+      {
+        id: createId(),
+        projectName: '3日前（黄）',
+        customerName: 'フジパーツ',
+        customerContact: '山本',
+        assigneeUserId: sato.id,
+        deadline: isoDaysAgo(-3),
+        completed: false,
+        completedAt: null,
+      },
+      {
+        id: createId(),
+        projectName: '既に提出済',
+        customerName: 'テック商事',
+        customerContact: '伊藤',
+        assigneeUserId: yamada.id,
+        deadline: isoDaysAgo(10),
+        completed: true,
+        completedAt: isoDaysAgo(2),
+      },
+    ],
   }
 }
 

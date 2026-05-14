@@ -912,6 +912,17 @@
   align-items: center;
 }
 
+.header-cloud-sync {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  max-width: 14rem;
+  line-height: 1.35;
+}
+
+.header-cloud-sync-error {
+  color: #b91c1c;
+}
+
 .btn {
   font: inherit;
   font-size: 0.8125rem;
@@ -1717,4 +1728,150 @@
 
 .chart-sync-card-month {
   white-space: nowrap;
+}
+
+/* 見積もりタスク */
+.estimate-tasks-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: flex-end;
+}
+
+.estimate-tasks-deadline-hint {
+  margin: 0.4rem 0 0;
+  width: 100%;
+}
+
+.estimate-tasks-scroll {
+  overflow-x: auto;
+  margin: 0 -0.5rem;
+  padding: 0 0.5rem;
+}
+
+.estimate-tasks-col-check {
+  width: 3rem;
+  text-align: center;
+}
+
+.estimate-tasks-col-action {
+  width: 4.5rem;
+}
+
+.estimate-tasks-col-remaining {
+  width: 7.5rem;
+  white-space: nowrap;
+}
+
+.estimate-task-check-label {
+  display: flex;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.estimate-task-check-label input[type='checkbox'] {
+  width: 1.15rem;
+  height: 1.15rem;
+  cursor: pointer;
+}
+
+.estimate-task-project-due-3 {
+  color: #a16207;
+  font-weight: 600;
+}
+
+.estimate-task-project-due-1 {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+@keyframes estimate-task-project-blink {
+  0%,
+  45% {
+    color: #b91c1c;
+  }
+  55%,
+  100% {
+    color: #fca5a5;
+  }
+}
+
+.estimate-task-project-overdue {
+  animation: estimate-task-project-blink 1.1s ease-in-out infinite;
+  font-weight: 800;
+}
+
+.estimate-task-row-warn {
+  background: rgba(234, 179, 8, 0.12);
+}
+
+.estimate-task-row-due1 {
+  background: rgba(185, 28, 28, 0.1);
+}
+
+.estimate-task-row-overdue {
+  background: rgba(185, 28, 28, 0.14);
+}
+
+.estimate-task-remaining {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.estimate-task-remaining-warn {
+  color: #a16207;
+}
+
+.estimate-task-remaining-due1 {
+  color: #b91c1c;
+}
+
+.estimate-task-remaining-overdue {
+  color: #b91c1c;
+  animation: estimate-task-project-blink 1.1s ease-in-out infinite;
+}
+
+.estimate-task-remaining-done {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.estimate-task-row-done .cell-input,
+.estimate-task-row-done .estimate-task-project-input,
+.estimate-task-row-done .estimate-task-remaining {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.estimate-task-row-done .estimate-task-project-input {
+  animation: none !important;
+}
+
+.estimate-task-row-done .estimate-task-remaining {
+  animation: none !important;
+}
+
+.estimate-task-completed-at {
+  display: block;
+  margin-top: 0.2rem;
+}
+
+.estimate-tasks-stats-panel {
+  margin-top: 1.25rem;
+}
+
+.estimate-tasks-stats-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.estimate-tasks-stats-total {
+  background: var(--surface-hover);
+}
+
+.estimate-tasks-stats-total td {
+  border-top: 1px solid var(--border);
 }

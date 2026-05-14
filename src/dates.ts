@@ -45,3 +45,18 @@ export function formatElapsedLabel(days: number | null): string {
   if (days > 0) return `経過 ${days} 日`
   return `あと ${-days} 日（未来の日付）`
 }
+
+/**
+ * 暦日 fromIso から toIso までの日数（to − from、ローカル暦の 0 時同士）。
+ * 両方 YYYY-MM-DD。不正なら NaN。
+ */
+export function calendarDayDiff(fromIso: string, toIso: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromIso) || !/^\d{4}-\d{2}-\d{2}$/.test(toIso)) {
+    return NaN
+  }
+  const t = (s: string) => {
+    const [y, m, d] = s.split('-').map(Number) as [number, number, number]
+    return new Date(y, m - 1, d).getTime()
+  }
+  return Math.round((t(toIso) - t(fromIso)) / 86400000)
+}

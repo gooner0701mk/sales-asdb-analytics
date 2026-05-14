@@ -10,13 +10,28 @@ import {
 import type { Session, User } from '@supabase/supabase-js'
 import { getSupabase, isSupabaseConfigured } from '../supabaseClient'
 
+function emailRedirectToOrigin(): string | undefined {
+  if (typeof window === 'undefined') return undefined
+  const { origin } = window.location
+  if (!origin || origin === 'null') return undefined
+  return `${origin.replace(/\/$/, '')}/`
+}
+
+export type SignUpResult = {
+  error: string | null
+  /** メール確認が有効で、セッションがまだ無い＝確認メール待ち */
+  pendingEmailConfirmation: boolean
+}
+
 type AuthContextValue = {
   configured: boolean
   ready: boolean
   session: Session | null
   user: User | null
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>
+  signUp: (email: string, password: string) => Promise<SignUpResult>
+  /** アカウント作成の確認メールを再送（Supabase の resend） */
+  resendSignupEmail: (email: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
 }
 
@@ -67,9 +82,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(async (email: string, password: string) => {
     const sb = getSupabase()
-    if (!sb) return { error: 'Supabase が未設定です' }
+    if (!sb) return { error: 'Supabase が未設定です', pendingEmailConfirmation: false }
+    const redirectTo = emailRedirectToOrigin()
     try {
-      const { error } = await sb.auth.signUp({ email, password })
+      const { data, error } = await sb.auth.signUp({
+        email,
+        password,
+        options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+      })
+      if (error) {
+        return { error: error.message ?? '登録に失敗しました', pendingEmailConfirmation: false }
+      }
+      const pending = Boolean(data.user) && !data.session
+      return { error: null, pendingEmailConfirmation: pending }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { error: `通信エラー: ${msg}`, pendingEmailConfirmation: false }
+    }
+  }, [])
+
+  const resendSignupEmail = useCallback(async (email: string) => {
+    const sb = getSupabase()
+    if (!sb) return { error: 'Supabase が未設定です' }
+    const redirectTo = emailRedirectToOrigin()
+    try {
+      const { error } = await sb.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+        options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+      })
       return { error: error?.message ?? null }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -91,9 +132,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       signIn,
       signUp,
+      resendSignupEmail,
       signOut,
     }),
-    [ready, session, signIn, signUp, signOut],
+    [ready, session, signIn, signUp, resendSignupEmail, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useAuth } from './AuthContext'
 import './CloudLoginScreen.css'
 
@@ -10,12 +10,27 @@ function isLanOrLocalHostname(hostname: string): boolean {
 }
 
 export function CloudLoginScreen() {
-  const { signIn, signUp } = useAuth()
+  const { signIn, signUp, resendSignupEmail } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [awaitingEmailConfirmation, setAwaitingEmailConfirmation] = useState(false)
+  const [resendBusy, setResendBusy] = useState(false)
+  const [resendCooldownUntil, setResendCooldownUntil] = useState(0)
+  const [, setCooldownTick] = useState(0)
+
+  useEffect(() => {
+    if (resendCooldownUntil <= Date.now()) return
+    const id = window.setInterval(() => {
+      setCooldownTick((n) => n + 1)
+      if (Date.now() >= resendCooldownUntil) {
+        window.clearInterval(id)
+      }
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [resendCooldownUntil])
 
   const lanRedirectHint = useMemo(() => {
     if (typeof window === 'undefined') return null
@@ -34,12 +49,21 @@ export function CloudLoginScreen() {
           const { error } = await signIn(email.trim(), password)
           if (error) setMessage(error)
         } else {
-          const { error } = await signUp(email.trim(), password)
+          const { error, pendingEmailConfirmation } = await signUp(
+            email.trim(),
+            password,
+          )
           if (error) {
             setMessage(error)
+            setAwaitingEmailConfirmation(false)
+          } else if (pendingEmailConfirmation) {
+            setAwaitingEmailConfirmation(true)
+            setMessage(null)
+            setResendCooldownUntil(Date.now() + 45000)
           } else {
+            setAwaitingEmailConfirmation(false)
             setMessage(
-              '登録しました。メール確認を有効にしている場合は、届いたメールのリンクから有効化してからログインしてください。',
+              '登録が完了しました。このままログインできる場合は、上の「ログイン」に切り替えてください。',
             )
             setMode('login')
           }
@@ -51,9 +75,38 @@ export function CloudLoginScreen() {
     [email, password, mode, signIn, signUp],
   )
 
+  const resendCooldownLeftMs = Math.max(0, resendCooldownUntil - Date.now())
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  const canResend = emailLooksValid && resendCooldownLeftMs === 0 && !resendBusy
+
+  const onResendSignup = useCallback(async () => {
+    const trimmed = email.trim()
+    if (!trimmed) {
+      setMessage('メールアドレスを入力してください')
+      return
+    }
+    setMessage(null)
+    setResendBusy(true)
+    try {
+      const { error } = await resendSignupEmail(trimmed)
+      if (error) {
+        setMessage(error)
+      } else {
+        setMessage(
+          '確認メールを再送しました。届くまで数分かかることがあります。迷惑メールフォルダもご確認ください。',
+        )
+        setResendCooldownUntil(Date.now() + 60000)
+      }
+    } finally {
+      setResendBusy(false)
+    }
+  }, [email, resendSignupEmail])
+
   return (
     <div className="cloud-login-screen">
-      <div className="cloud-login-card">
+      <div
+        className={`cloud-login-card${awaitingEmailConfirmation ? ' cloud-login-card-await' : ''}`}
+      >
         <h1 className="cloud-login-title">営業データ分析</h1>
         <p className="cloud-login-lead">
           クラウド保存モードです。アカウントにログインすると、データは Supabase 上のあなた専用の領域に保存されます。
@@ -65,6 +118,7 @@ export function CloudLoginScreen() {
             onClick={() => {
               setMode('login')
               setMessage(null)
+              setAwaitingEmailConfirmation(false)
             }}
           >
             ログイン
@@ -75,11 +129,13 @@ export function CloudLoginScreen() {
             onClick={() => {
               setMode('signup')
               setMessage(null)
+              setAwaitingEmailConfirmation(false)
             }}
           >
             アカウント作成
           </button>
         </div>
+        {!awaitingEmailConfirmation ? (
         <form className="cloud-login-form" onSubmit={onSubmit}>
           <label className="field">
             <span className="field-label">メールアドレス</span>
@@ -108,6 +164,84 @@ export function CloudLoginScreen() {
             {busy ? '処理中…' : mode === 'login' ? 'ログイン' : '登録する'}
           </button>
         </form>
+        ) : null}
+        {awaitingEmailConfirmation ? (
+          <div
+            className={`cloud-login-email-await${lanRedirectHint ? ' cloud-login-email-await-lan' : ''}`}
+            role="status"
+          >
+            <p className="cloud-login-email-await-title">
+              確認メールを送信しました
+            </p>
+            <p className="cloud-login-email-await-lead">
+              <strong>{email.trim()}</strong> 宛です。スマホ・iPad のメールアプリでは次の場所も必ず確認してください。
+            </p>
+            <ul className="cloud-login-email-await-list">
+              <li>
+                <strong>迷惑メール・ジャンク・プロモーション</strong>（Gmail・iCloud メールなど）
+              </li>
+              <li>
+                <strong>数分待ってから</strong>再読み込み（届きが遅れることがあります）
+              </li>
+              <li>
+                メール内のリンクから戻る先は{' '}
+                <strong>
+                  {typeof window !== 'undefined' ? window.location.origin : 'このサイト'}
+                </strong>{' '}
+                です。Supabase の <strong>Authentication → URL Configuration → Redirect URLs</strong>{' '}
+                に、このオリジンを含む行（例:{' '}
+                <code>
+                  {typeof window !== 'undefined'
+                    ? `${window.location.origin}/**`
+                    : 'https://（サイト）/**'}
+                </code>
+                ）が<strong>必ず</strong>入っているか確認してください（未設定だとメールは届いてもリンク先で弾かれます）。
+              </li>
+              <li>会社メールの場合、<strong>外部からのメールがブロック</strong>されていないか（セキュリティ・受信許可）も確認してください。</li>
+            </ul>
+            <div className="cloud-login-email-await-actions">
+              <button
+                type="button"
+                className="btn primary cloud-login-resend"
+                disabled={!canResend}
+                onClick={() => {
+                  void onResendSignup()
+                }}
+              >
+                {resendBusy
+                  ? '再送中…'
+                  : resendCooldownLeftMs > 0
+                    ? `再送まで ${Math.ceil(resendCooldownLeftMs / 1000)} 秒`
+                    : '確認メールを再送する'}
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  setAwaitingEmailConfirmation(false)
+                  setMode('signup')
+                  setPassword('')
+                  setMessage(null)
+                }}
+              >
+                別のアドレスでやり直す
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => {
+                  setAwaitingEmailConfirmation(false)
+                  setMode('login')
+                  setMessage(
+                    'メール内のリンクで確認できたら、メールアドレスとパスワードでログインしてください。',
+                  )
+                }}
+              >
+                確認が終わったらログインへ
+              </button>
+            </div>
+          </div>
+        ) : null}
         {message ? (
           <p className="cloud-login-message" role="alert">
             {message}

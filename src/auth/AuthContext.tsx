@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
+import { friendlyResendError, friendlySignInError } from './authErrorMessages'
 import { getSupabase, isSupabaseConfigured } from '../supabaseClient'
 
 function emailRedirectToOrigin(): string | undefined {
@@ -73,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!sb) return { error: 'Supabase が未設定です' }
     try {
       const { error } = await sb.auth.signInWithPassword({ email, password })
-      return { error: error?.message ?? null }
+      return { error: friendlySignInError(error?.message) }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       return { error: `通信エラー: ${msg}` }
@@ -111,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: email.trim(),
         options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
       })
-      return { error: error?.message ?? null }
+      return { error: friendlyResendError(error?.message) }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       return { error: `通信エラー: ${msg}` }

@@ -125,6 +125,10 @@ export function CloudLoginScreen() {
         <p className="cloud-login-lead">
           クラウド保存モードです。アカウントにログインすると、データは Supabase 上のあなた専用の領域に保存されます。
         </p>
+        <p className="hint small cloud-login-rate-hint">
+          登録や確認メールの再送を短時間に繰り返すと、セキュリティのため一時的にブロックされることがあります（
+          <strong>試行回数が多すぎます</strong>）。15〜60 分ほど空けてから再度お試しください。
+        </p>
         <div className="cloud-login-seg" role="group" aria-label="モード">
           <button
             type="button"

@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -23,7 +24,11 @@ import {
   uniqueSortedFiscalYearsDesc,
 } from './invoicePeriod'
 import {
-  summarizeInvoicesByClient,
+  rankedUsersByInvoiceTotal,
+  topClientSharesByScopeRevenue,
+  userTopClientPieSlices,
+} from './invoiceRankingsModel'
+import {
   summarizeInvoicesByUser,
   teamInvoiceTotalYen,
 } from './invoiceMetrics'
@@ -161,10 +166,43 @@ export function InvoicesTab({
     () => summarizeInvoicesByUser(periodVisibleInvoices, users),
     [periodVisibleInvoices, users],
   )
-  const byClientRows = useMemo(
-    () => summarizeInvoicesByClient(periodVisibleInvoices, users),
+
+  const clientTop10ForScope = useMemo(
+    () => topClientSharesByScopeRevenue(periodVisibleInvoices, 10),
+    [periodVisibleInvoices],
+  )
+
+  const clientScopePieSlices = useMemo(() => {
+    if (clientTop10ForScope.length === 0) return []
+    const topSum = clientTop10ForScope.reduce((s, r) => s + r.totalYen, 0)
+    const slices = clientTop10ForScope.map((r) => ({
+      name: r.clientName,
+      value: r.totalYen,
+      sharePercent: r.shareOfScopePercent,
+    }))
+    const rest = scopeTotal - topSum
+    if (rest > 0 && scopeTotal > 0) {
+      slices.push({
+        name: 'その他（11位以下）',
+        value: rest,
+        sharePercent: Math.round((rest / scopeTotal) * 1000) / 10,
+      })
+    }
+    return slices
+  }, [clientTop10ForScope, scopeTotal])
+
+  const rankedUsersForClientPies = useMemo(
+    () => rankedUsersByInvoiceTotal(periodVisibleInvoices, users),
     [periodVisibleInvoices, users],
   )
+
+  const userClientPieSlicesByUserId = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof userTopClientPieSlices>>()
+    for (const u of rankedUsersForClientPies) {
+      m.set(u.userId, userTopClientPieSlices(u.userId, periodVisibleInvoices, 5))
+    }
+    return m
+  }, [rankedUsersForClientPies, periodVisibleInvoices])
 
   const soloViewUserId =
     dataViewUserIds !== 'all' && dataViewUserIds.length === 1
@@ -272,27 +310,65 @@ export function InvoicesTab({
     )
   }
 
-  const pieTooltipClientSlice = (props: Record<string, unknown>) => {
+  const pieTooltipCompanyClientShare = useCallback((props: Record<string, unknown>) => {
     if (!props.active || !Array.isArray(props.payload) || props.payload.length === 0) {
       return null
     }
-    const p = props.payload[0] as {
+    const entry = props.payload[0] as {
       name?: string | number
       value?: number
-      payload?: { shareOfClientPercent?: number }
+      payload?: { sharePercent?: number; value?: number }
     }
-    const v = typeof p.value === 'number' ? p.value : 0
-    const pct = p.payload?.shareOfClientPercent
+    const nested = entry?.payload
+    const share =
+      typeof nested?.sharePercent === 'number'
+        ? nested.sharePercent
+        : typeof (entry as { sharePercent?: number }).sharePercent === 'number'
+          ? (entry as { sharePercent: number }).sharePercent
+          : undefined
+    const rawV = entry?.value ?? nested?.value
+    const v = typeof rawV === 'number' ? rawV : Number(rawV)
+    const safe = Number.isFinite(v) ? v : 0
     return (
       <div className="invoices-pie-tooltip">
-        <div className="invoices-pie-tooltip-name">{String(p.name ?? '')}</div>
-        <div>{formatYen(v)}</div>
-        {typeof pct === 'number' ? (
-          <div className="muted">この取引先内: {pct}％</div>
+        <div className="invoices-pie-tooltip-name">{String(entry?.name ?? '')}</div>
+        <div>{formatYen(safe)}</div>
+        {typeof share === 'number' ? (
+          <div className="muted">表示中の合計に対する割合: {share}％</div>
         ) : null}
       </div>
     )
-  }
+  }, [])
+
+  const pieTooltipUserClientShare = useCallback((props: Record<string, unknown>) => {
+    if (!props.active || !Array.isArray(props.payload) || props.payload.length === 0) {
+      return null
+    }
+    const entry = props.payload[0] as {
+      name?: string | number
+      value?: number
+      payload?: { shareOfUserPercent?: number; name?: string; value?: number }
+    }
+    const nested = entry?.payload
+    const share =
+      typeof nested?.shareOfUserPercent === 'number'
+        ? nested.shareOfUserPercent
+        : typeof (entry as { shareOfUserPercent?: number }).shareOfUserPercent === 'number'
+          ? (entry as { shareOfUserPercent: number }).shareOfUserPercent
+          : undefined
+    const rawV = entry?.value ?? nested?.value
+    const v = typeof rawV === 'number' ? rawV : Number(rawV)
+    const safe = Number.isFinite(v) ? v : 0
+    return (
+      <div className="invoices-pie-tooltip">
+        <div className="invoices-pie-tooltip-name">{String(entry?.name ?? nested?.name ?? '')}</div>
+        <div>{formatYen(safe)}</div>
+        {typeof share === 'number' ? (
+          <div className="muted">この担当の期間内合計に対する割合: {share}％</div>
+        ) : null}
+      </div>
+    )
+  }, [])
 
   return (
     <div className="targets-tab invoices-tab">
@@ -336,7 +412,7 @@ export function InvoicesTab({
         <p className="hint">
           <strong>上のデータ表示プルダウン</strong>と分析タブの<strong>記録する担当</strong>に連動して、集計対象の請求が切り替わります（保存データとも同期）。
           下の期間切替で<strong>各月</strong>または<strong>年度（設定の会計年度開始月に準拠）</strong>を選ぶと、合計・一覧・シェアの円グラフがその範囲に絞り込まれます。
-          担当別の円グラフは<strong>表示中の請求合計</strong>に対する内訳、取引先ごとの円グラフは<strong>その取引先の請求合計</strong>に対する担当内訳です。
+          担当別の円グラフは<strong>表示中の請求合計</strong>に対する内訳、取引先シェアは<strong>表示中の合計に対する取引先の割合</strong>（会社全体のイメージ）と、<strong>各担当の期間合計に対する取引先の割合</strong>です。
           {soloViewUserId !== null && teamTotalInPeriod > 0 && shareOfTeamWhenSelf !== null ? (
             <>
               {' '}
@@ -504,6 +580,7 @@ export function InvoicesTab({
                     innerRadius={52}
                     outerRadius={100}
                     paddingAngle={1}
+                    isAnimationActive={false}
                   >
                     {pieByUser.map((_, i) => (
                       <Cell
@@ -555,26 +632,71 @@ export function InvoicesTab({
           </table>
         </div>
 
-        <h3 className="invoices-subheading">取引先別（担当シェア・円グラフ）</h3>
-        {byClientRows.length === 0 ? (
+        <div className="invoices-pie-section">
+          <h3 className="invoices-subheading">取引先別シェア（表示中の合計に対する割合）</h3>
+          <p className="hint small">
+            取引先ごとの請求合計が、上記「表示中の合計」（{formatYen(scopeTotal)}）の何％かを示します。取引先は金額上位10件と「その他（11位以下）」にまとめています。
+          </p>
+          {clientScopePieSlices.length === 0 ? (
+            <p className="hint small invoices-pie-empty">
+              この期間・表示範囲に請求がありません。請求を追加するか、月／年度・「全員」を切り替えてください。
+            </p>
+          ) : (
+            <div className="invoices-pie-single" aria-label="取引先別の表示中合計に対するシェア">
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={clientScopePieSlices}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="48%"
+                    innerRadius={52}
+                    outerRadius={100}
+                    paddingAngle={1}
+                    isAnimationActive={false}
+                  >
+                    {clientScopePieSlices.map((_, i) => (
+                      <Cell
+                        key={`scope-client-${i}`}
+                        fill={PIE_COLORS[i % PIE_COLORS.length]}
+                        stroke="var(--surface)"
+                        strokeWidth={1}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip content={pieTooltipCompanyClientShare} />
+                  <Legend
+                    verticalAlign="bottom"
+                    formatter={(value) => String(value)}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        <h3 className="invoices-subheading">担当別・取引先シェア（各担当の期間合計に対する割合）</h3>
+        <p className="hint small">
+          各担当について、取引先ごとの請求がその担当の期間合計に占める割合です（各円グラフの合計は100％）。取引先は金額上位5件と「その他」にまとめています。
+        </p>
+        {rankedUsersForClientPies.length === 0 ? (
           <p className="hint small invoices-pie-empty">
-            この期間・表示範囲に取引先単位の集計がありません。
+            この期間・表示範囲に担当別の取引先シェアを表示できる請求がありません。
           </p>
         ) : (
-          <div className="invoices-client-pie-grid">
-            {byClientRows.map((row) => {
-              const pieData = row.byUser
-                .filter((s) => s.amountYen > 0)
-                .map((s) => ({
-                  name: s.displayName,
-                  value: s.amountYen,
-                  shareOfClientPercent: s.shareOfClientPercent,
-                }))
+          <div
+            className="invoices-client-pie-grid invoices-client-pie-grid--scroll"
+            role="region"
+            aria-label="担当別の取引先シェア"
+          >
+            {rankedUsersForClientPies.map((u) => {
+              const pieData = userClientPieSlicesByUserId.get(u.userId) ?? []
               return (
-                <div key={row.clientName} className="invoices-client-pie-card">
-                  <div className="invoices-client-pie-title">{row.clientName}</div>
+                <div key={u.userId} className="invoices-client-pie-card">
+                  <div className="invoices-client-pie-title">{u.displayName}</div>
                   <div className="muted invoices-client-pie-sub">
-                    合計 {formatYen(row.totalYen)}
+                    担当の期間合計 {formatYen(u.totalYen)}
                   </div>
                   {pieData.length === 0 ? (
                     <p className="hint small">内訳なし</p>
@@ -591,17 +713,18 @@ export function InvoicesTab({
                             innerRadius={0}
                             outerRadius={72}
                             paddingAngle={1}
+                            isAnimationActive={false}
                           >
                             {pieData.map((_, i) => (
                               <Cell
-                                key={`c-${row.clientName}-${i}`}
+                                key={`uc-${u.userId}-${i}`}
                                 fill={PIE_COLORS[i % PIE_COLORS.length]}
                                 stroke="var(--surface)"
                                 strokeWidth={1}
                               />
                             ))}
                           </Pie>
-                          <Tooltip content={pieTooltipClientSlice} />
+                          <Tooltip content={pieTooltipUserClientShare} />
                           <Legend
                             layout="horizontal"
                             verticalAlign="bottom"

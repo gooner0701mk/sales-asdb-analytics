@@ -31,6 +31,7 @@ import { formatYmJa } from './metrics'
 import { fyStartYearFromCalendarYm } from './fiscalYear'
 import { dataViewSummaryLabel } from './dataViewSelection'
 import { useInvoiceCalendarPeriodAutoSync } from './useInvoiceCalendarPeriodAutoSync'
+import { useMediaQuery } from './useMediaQuery'
 import type { CompanySettings, DataViewUserIds, Invoice, User } from './types'
 
 const PIE_COLORS = [
@@ -168,6 +169,10 @@ export function InvoiceRankingDashboard({
 
   const emptySelection =
     dataViewUserIds !== 'all' && dataViewUserIds.length === 0
+
+  /** マウスホバー前提の環境では hover、タッチ中心では tap でツールチップ */
+  const pieTooltipFinePointer = useMediaQuery('(hover: hover) and (pointer: fine)')
+  const pieTooltipTrigger = pieTooltipFinePointer ? 'hover' : 'click'
 
   const companySharePieTooltip = useCallback((props: Record<string, unknown>) => {
     if (!props.active || !Array.isArray(props.payload) || props.payload.length === 0) {
@@ -352,6 +357,10 @@ export function InvoiceRankingDashboard({
           <h3 className="invoice-rankings-subheading">
             取引先シェア率（表示スコープ内・TOP10＋その他）
           </h3>
+          <p className="hint small invoice-rankings-pie-hint">
+            取引先名と割合は、PC
+            ではスライスにカーソルを合わせると、スマホ・タブレットではスライスをタップすると表示されます。
+          </p>
           {clientSharePieSlices.length === 0 ? (
             <div className="chart-placeholder">この期間の請求がありません</div>
           ) : (
@@ -366,22 +375,16 @@ export function InvoiceRankingDashboard({
                     cy="48%"
                     outerRadius={108}
                     paddingAngle={1}
-                    label={({ name, payload }) =>
-                      typeof payload === 'object' &&
-                      payload &&
-                      'sharePercent' in payload &&
-                      typeof (payload as { sharePercent?: number }).sharePercent === 'number'
-                        ? `${String(name).slice(0, 8)}${String(name).length > 8 ? '…' : ''} ${(payload as { sharePercent: number }).sharePercent}％`
-                        : String(name ?? '')
-                    }
-                    labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
                     isAnimationActive={false}
                   >
                     {clientSharePieSlices.map((_, i) => (
                       <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip content={companySharePieTooltip} />
+                  <Tooltip
+                    content={companySharePieTooltip}
+                    trigger={pieTooltipTrigger}
+                  />
                   <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="bottom" />
                 </PieChart>
               </ResponsiveContainer>
@@ -391,6 +394,9 @@ export function InvoiceRankingDashboard({
           <h3 className="invoice-rankings-subheading">
             請求額が多い担当上位5名の取引先構成（各取引先TOP5＋その他）
           </h3>
+          <p className="hint small invoice-rankings-pie-hint">
+            各グラフも同様に、ホバーまたはタップで取引先名と金額・割合を表示します。
+          </p>
           {top5UsersForPies.length === 0 ? (
             <div className="chart-placeholder">この期間の請求がありません</div>
           ) : (
@@ -424,7 +430,10 @@ export function InvoiceRankingDashboard({
                                 <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                               ))}
                             </Pie>
-                            <Tooltip content={pieTooltip} />
+                            <Tooltip
+                              content={pieTooltip}
+                              trigger={pieTooltipTrigger}
+                            />
                           </PieChart>
                         </ResponsiveContainer>
                       </div>

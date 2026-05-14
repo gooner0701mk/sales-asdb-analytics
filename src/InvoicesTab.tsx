@@ -220,6 +220,8 @@ export function InvoicesTab({
       : null
 
   const narrowLayout = useMediaQuery('(max-width: 960px)')
+  const pieTooltipFinePointer = useMediaQuery('(hover: hover) and (pointer: fine)')
+  const pieTooltipTrigger = pieTooltipFinePointer ? 'hover' : 'click'
 
   const pieByUser = useMemo(
     () =>
@@ -591,7 +593,7 @@ export function InvoicesTab({
                       />
                     ))}
                   </Pie>
-                  <Tooltip content={pieTooltipByUser} />
+                  <Tooltip content={pieTooltipByUser} trigger={pieTooltipTrigger} />
                   <Legend
                     verticalAlign="bottom"
                     formatter={(value) => String(value)}
@@ -665,7 +667,10 @@ export function InvoicesTab({
                       />
                     ))}
                   </Pie>
-                  <Tooltip content={pieTooltipCompanyClientShare} />
+                  <Tooltip
+                    content={pieTooltipCompanyClientShare}
+                    trigger={pieTooltipTrigger}
+                  />
                   <Legend
                     verticalAlign="bottom"
                     formatter={(value) => String(value)}
@@ -724,7 +729,10 @@ export function InvoicesTab({
                               />
                             ))}
                           </Pie>
-                          <Tooltip content={pieTooltipUserClientShare} />
+                          <Tooltip
+                            content={pieTooltipUserClientShare}
+                            trigger={pieTooltipTrigger}
+                          />
                           <Legend
                             layout="horizontal"
                             verticalAlign="bottom"

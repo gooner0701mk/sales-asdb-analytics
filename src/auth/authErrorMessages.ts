@@ -18,6 +18,9 @@ export function friendlySignInError(raw: string | null | undefined): string | nu
   if (lower.includes('too many requests') || lower.includes('rate limit')) {
     return '試行回数が多すぎます。数分待ってから再度お試しください。'
   }
+  if (lower.includes('jwt') || lower.includes('session expired')) {
+    return '保存されたログイン情報が壊れているか期限切れです。ログイン画面の「保存した認証情報を消去」を押してから、再度ログインしてください。'
+  }
   if (lower.includes('network') || lower.includes('fetch')) {
     return `通信に失敗しました（${raw}）。電波・Wi‑Fi を確認し、ページを再読み込みしてから試してください。`
   }

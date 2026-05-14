@@ -10,7 +10,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js'
 import { friendlyResendError, friendlySignInError, friendlySignUpError } from './authErrorMessages'
 import { withAuthTimeout } from './authTimeout'
-import { getSupabase, isSupabaseConfigured } from '../supabaseClient'
+import { clearSupabaseBrowserSession, getSupabase, isSupabaseConfigured } from '../supabaseClient'
 
 function emailRedirectToOrigin(): string | undefined {
   if (typeof window === 'undefined') return undefined
@@ -34,6 +34,8 @@ type AuthContextValue = {
   signUp: (email: string, password: string) => Promise<SignUpResult>
   /** アカウント作成の確認メールを再送（Supabase の resend） */
   resendSignupEmail: (email: string) => Promise<{ error: string | null }>
+  /** 端末に保存された Supabase 認証データを消去（ログインできないときの救済） */
+  clearLocalAuthSession: () => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -50,16 +52,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    void sb.auth
-      .getSession()
-      .then(({ data: { session: s } }) => {
-        setSession(s)
+    const BOOTSTRAP_MS = 12_000
+    void (async () => {
+      try {
+        const { data } = await Promise.race([
+          sb.auth.getSession(),
+          new Promise<never>((_, rej) =>
+            setTimeout(() => rej(new Error('SESSION_BOOTSTRAP_TIMEOUT')), BOOTSTRAP_MS),
+          ),
+        ])
+        setSession(data.session ?? null)
+      } catch (e) {
+        console.error('[AuthProvider] getSession', e)
+        setSession(null)
+      } finally {
         setReady(true)
-      })
-      .catch((err) => {
-        console.error('[AuthProvider] getSession', err)
-        setReady(true)
-      })
+      }
+    })()
 
     const {
       data: { subscription },
@@ -148,6 +157,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const clearLocalAuthSession = useCallback(async () => {
+    await clearSupabaseBrowserSession()
+  }, [])
+
   const signOut = useCallback(async () => {
     const sb = getSupabase()
     if (!sb) return
@@ -163,9 +176,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       resendSignupEmail,
+      clearLocalAuthSession,
       signOut,
     }),
-    [ready, session, signIn, signUp, resendSignupEmail, signOut],
+    [ready, session, signIn, signUp, resendSignupEmail, clearLocalAuthSession, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -10,7 +10,7 @@ function isLanOrLocalHostname(hostname: string): boolean {
 }
 
 export function CloudLoginScreen() {
-  const { signIn, signUp, resendSignupEmail } = useAuth()
+  const { signIn, signUp, resendSignupEmail, clearLocalAuthSession } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'login' | 'signup'>('login')
@@ -290,10 +290,27 @@ export function CloudLoginScreen() {
           <code>supabase/migrations</code> 参照）。
         </p>
         ) : (
-          <p className="hint small cloud-login-foot cloud-login-foot-prod">
-            メールが届かない場合は迷惑メールを確認し、Supabase ダッシュボードの{' '}
-            <strong>Authentication → Emails</strong> でカスタム SMTP の利用も検討してください。
-          </p>
+          <div className="cloud-login-foot-prod-wrap">
+            <p className="hint small cloud-login-foot cloud-login-foot-prod">
+              メールが届かない場合は迷惑メールを確認し、Supabase ダッシュボードの{' '}
+              <strong>Authentication → Emails</strong> でカスタム SMTP の利用も検討してください。
+            </p>
+            <button
+              type="button"
+              className="btn ghost cloud-login-clear-session"
+              onClick={() => {
+                void (async () => {
+                  await clearLocalAuthSession()
+                  window.location.reload()
+                })()
+              }}
+            >
+              保存した認証情報を消去して再読み込み
+            </button>
+            <p className="hint small cloud-login-clear-hint">
+              ログイン・登録が通らないとき、古いトークンが残っていることがあります（再ログインが必要になります）。
+            </p>
+          </div>
         )}
       </div>
     </div>

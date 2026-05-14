@@ -1517,11 +1517,21 @@
   padding-right: 0.25rem;
 }
 
+.invoices-pie-mini-wrap--client-share {
+  min-height: 228px;
+  overflow: visible;
+}
+
+.invoices-pie-mini-wrap--client-share .recharts-responsive-container {
+  overflow: visible !important;
+}
+
 .invoices-client-pie-card {
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 0.65rem 0.5rem 0.35rem;
+  padding: 0.65rem 0.5rem 0.5rem;
   background: var(--surface);
+  overflow: visible;
 }
 
 .invoices-client-pie-title {
@@ -1573,8 +1583,9 @@
 .invoice-rankings-pie-card {
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 0.65rem 0.5rem 0.35rem;
+  padding: 0.65rem 0.5rem 0.5rem;
   background: var(--surface);
+  overflow: visible;
 }
 
 .invoice-rankings-pie-title {
@@ -1594,7 +1605,13 @@
 }
 
 .invoice-rankings-pie-rc {
-  height: 220px;
+  height: 228px;
+  min-height: 228px;
+  overflow: visible;
+}
+
+.invoice-rankings-pie-rc .recharts-responsive-container {
+  overflow: visible !important;
 }
 
 .invoices-pie-mini-wrap {

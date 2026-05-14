@@ -390,7 +390,7 @@ export function InvoiceRankingDashboard({
             請求額が多い担当上位5名の取引先構成（各取引先TOP5＋その他）
           </h3>
           <p className="hint small invoice-rankings-pie-hint">
-            各グラフも同様に、カーソルを合わせると取引先の詳細が表示されます。
+            各グラフも同様に、カーソルを合わせると取引先の詳細が表示されます（凡例はありません）。
           </p>
           {top5UsersForPies.length === 0 ? (
             <div className="chart-placeholder">この期間の請求がありません</div>
@@ -408,8 +408,8 @@ export function InvoiceRankingDashboard({
                       <div className="chart-placeholder">データなし</div>
                     ) : (
                       <div className="invoice-rankings-rc-host invoice-rankings-pie-rc">
-                        <ResponsiveContainer width="100%" height={220} debounce={80} minWidth={0}>
-                          <PieChart>
+                        <ResponsiveContainer width="100%" height={228} debounce={80} minWidth={0}>
+                          <PieChart margin={{ top: 14, right: 10, bottom: 14, left: 10 }}>
                             <Pie
                               data={slices}
                               dataKey="value"
@@ -417,7 +417,7 @@ export function InvoiceRankingDashboard({
                               cx="50%"
                               cy="50%"
                               innerRadius={44}
-                              outerRadius={78}
+                              outerRadius={70}
                               paddingAngle={1}
                               isAnimationActive={false}
                             >

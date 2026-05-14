@@ -688,6 +688,7 @@ export function InvoicesTab({
         <h3 className="invoices-subheading">担当別・取引先シェア（各担当の期間合計に対する割合）</h3>
         <p className="hint small">
           各担当について、取引先ごとの請求がその担当の期間合計に占める割合です（各円グラフの合計は100％）。取引先は金額上位5件と「その他」にまとめています。
+          取引先名はスライスに<strong>カーソルを合わせたとき</strong>に表示されます。
         </p>
         {rankedUsersForClientPies.length === 0 ? (
           <p className="hint small invoices-pie-empty">
@@ -710,9 +711,9 @@ export function InvoicesTab({
                   {pieData.length === 0 ? (
                     <p className="hint small">内訳なし</p>
                   ) : (
-                    <div className="invoices-pie-mini-wrap">
-                      <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
+                    <div className="invoices-pie-mini-wrap invoices-pie-mini-wrap--client-share">
+                      <ResponsiveContainer width="100%" height={228} debounce={80}>
+                        <PieChart margin={{ top: 14, right: 10, bottom: 14, left: 10 }}>
                           <Pie
                             data={pieData}
                             dataKey="value"
@@ -720,7 +721,7 @@ export function InvoicesTab({
                             cx="50%"
                             cy="50%"
                             innerRadius={0}
-                            outerRadius={72}
+                            outerRadius={68}
                             paddingAngle={1}
                             isAnimationActive={false}
                           >
@@ -737,11 +738,6 @@ export function InvoicesTab({
                             content={pieTooltipUserClientShare}
                             trigger="hover"
                             isAnimationActive={false}
-                          />
-                          <Legend
-                            layout="horizontal"
-                            verticalAlign="bottom"
-                            formatter={(value) => String(value)}
                           />
                         </PieChart>
                       </ResponsiveContainer>

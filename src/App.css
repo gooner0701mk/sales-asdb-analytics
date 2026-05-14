@@ -1504,57 +1504,6 @@
   margin-bottom: 0.2rem;
 }
 
-.pie-hover-tap-wrap {
-  width: 100%;
-}
-
-.pie-mobile-touch-panel {
-  margin-top: 0.65rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-}
-
-.pie-mobile-touch-panel-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.35rem;
-}
-
-.pie-mobile-touch-panel-name {
-  font-size: 0.9rem;
-  font-weight: 600;
-  word-break: break-word;
-  flex: 1;
-  min-width: 0;
-}
-
-.pie-mobile-touch-panel-close {
-  flex-shrink: 0;
-  font-size: 0.8rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  cursor: pointer;
-}
-
-.pie-mobile-touch-panel-close:hover {
-  background: var(--surface);
-}
-
-.pie-mobile-touch-panel-yen {
-  font-size: 0.95rem;
-}
-
-.pie-mobile-touch-panel-foot {
-  margin-top: 0.35rem;
-}
-
 .invoices-client-pie-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

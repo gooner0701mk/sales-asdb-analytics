@@ -136,6 +136,26 @@
   min-width: 0;
 }
 
+.cloud-login-login-extras {
+  margin: 0.85rem 0 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px dashed var(--border);
+  text-align: left;
+}
+
+.cloud-login-login-extras-text {
+  margin: 0 0 0.5rem;
+}
+
+.cloud-login-login-resend {
+  width: 100%;
+}
+
+.cloud-login-foot-prod {
+  margin-top: 1rem;
+}
+
 .cloud-login-lan-hint {
   margin: 1rem 0 0;
   padding: 0.75rem 0.85rem;

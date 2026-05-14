@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
-import { friendlyResendError, friendlySignInError } from './authErrorMessages'
+import { friendlyResendError, friendlySignInError, friendlySignUpError } from './authErrorMessages'
+import { withAuthTimeout } from './authTimeout'
 import { getSupabase, isSupabaseConfigured } from '../supabaseClient'
 
 function emailRedirectToOrigin(): string | undefined {
@@ -73,9 +74,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sb = getSupabase()
     if (!sb) return { error: 'Supabase が未設定です' }
     try {
-      const { error } = await sb.auth.signInWithPassword({ email, password })
-      return { error: friendlySignInError(error?.message) }
+      return await withAuthTimeout(async () => {
+        const { error } = await sb.auth.signInWithPassword({ email, password })
+        return { error: friendlySignInError(error?.message) }
+      })
     } catch (e) {
+      if (e instanceof Error && e.message === 'AUTH_TIMEOUT') {
+        return {
+          error:
+            'サーバーからの応答がありません（タイムアウト）。電波・Wi‑Fi を確認し、ページを再読み込みしてから再度お試しください。',
+        }
+      }
       const msg = e instanceof Error ? e.message : String(e)
       return { error: `通信エラー: ${msg}` }
     }
@@ -86,17 +95,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!sb) return { error: 'Supabase が未設定です', pendingEmailConfirmation: false }
     const redirectTo = emailRedirectToOrigin()
     try {
-      const { data, error } = await sb.auth.signUp({
-        email,
-        password,
-        options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+      return await withAuthTimeout(async () => {
+        const { data, error } = await sb.auth.signUp({
+          email,
+          password,
+          options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+        })
+        if (error) {
+          return {
+            error: friendlySignUpError(error.message) ?? error.message ?? '登録に失敗しました',
+            pendingEmailConfirmation: false,
+          }
+        }
+        const pending = Boolean(data.user) && !data.session
+        return { error: null, pendingEmailConfirmation: pending }
       })
-      if (error) {
-        return { error: error.message ?? '登録に失敗しました', pendingEmailConfirmation: false }
-      }
-      const pending = Boolean(data.user) && !data.session
-      return { error: null, pendingEmailConfirmation: pending }
     } catch (e) {
+      if (e instanceof Error && e.message === 'AUTH_TIMEOUT') {
+        return {
+          error:
+            'サーバーからの応答がありません（タイムアウト）。登録が完了している可能性もあるので、迷惑メールを確認のうえ「確認メールを再送」または「ログイン」を試してください。',
+          pendingEmailConfirmation: false,
+        }
+      }
       const msg = e instanceof Error ? e.message : String(e)
       return { error: `通信エラー: ${msg}`, pendingEmailConfirmation: false }
     }
@@ -107,13 +128,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!sb) return { error: 'Supabase が未設定です' }
     const redirectTo = emailRedirectToOrigin()
     try {
-      const { error } = await sb.auth.resend({
-        type: 'signup',
-        email: email.trim(),
-        options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+      return await withAuthTimeout(async () => {
+        const { error } = await sb.auth.resend({
+          type: 'signup',
+          email: email.trim(),
+          options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+        })
+        return { error: friendlyResendError(error?.message) }
       })
-      return { error: friendlyResendError(error?.message) }
     } catch (e) {
+      if (e instanceof Error && e.message === 'AUTH_TIMEOUT') {
+        return {
+          error:
+            'サーバーからの応答がありません（タイムアウト）。しばらくしてから再度「再送」を試してください。',
+        }
+      }
       const msg = e instanceof Error ? e.message : String(e)
       return { error: `通信エラー: ${msg}` }
     }

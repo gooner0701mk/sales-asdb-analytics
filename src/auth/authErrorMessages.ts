@@ -24,6 +24,29 @@ export function friendlySignInError(raw: string | null | undefined): string | nu
   return raw
 }
 
+export function friendlySignUpError(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const lower = raw.toLowerCase()
+
+  if (
+    lower.includes('already registered') ||
+    lower.includes('user already') ||
+    lower.includes('already been registered')
+  ) {
+    return 'このメールアドレスは既に登録されています。「ログイン」に切り替えて試すか、未確認なら下の「確認メールを再送」を試してください。'
+  }
+  if (lower.includes('invalid email')) {
+    return 'メールアドレスの形式が正しくないようです。打ち間違い（例: @gmail.com の末尾）を確認してください。'
+  }
+  if (lower.includes('too many requests') || lower.includes('rate limit')) {
+    return '試行回数が多すぎます。数分待ってから再度お試しください。'
+  }
+  if (lower.includes('password')) {
+    return raw
+  }
+  return raw
+}
+
 export function friendlyResendError(raw: string | null | undefined): string | null {
   if (!raw) return null
   const lower = raw.toLowerCase()
@@ -32,6 +55,9 @@ export function friendlyResendError(raw: string | null | undefined): string | nu
   }
   if (lower.includes('too many requests') || lower.includes('rate limit')) {
     return '試行回数が多すぎます。しばらく待ってから再度お試しください。'
+  }
+  if (lower.includes('not found') || lower.includes('no user')) {
+    return 'このメールアドレスでの未完了の登録が見つかりません。アカウント作成からやり直すか、メールアドレスを確認してください。'
   }
   return raw
 }

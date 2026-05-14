@@ -165,6 +165,27 @@ export function CloudLoginScreen() {
           </button>
         </form>
         ) : null}
+        {!awaitingEmailConfirmation && mode === 'login' ? (
+          <div className="cloud-login-login-extras">
+            <p className="hint small cloud-login-login-extras-text">
+              登録したが<strong>確認メールが届かない</strong>ときは、上にメールアドレスを入力してから次を押してください。
+            </p>
+            <button
+              type="button"
+              className="btn ghost cloud-login-login-resend"
+              disabled={!emailLooksValid || !canResend || resendBusy}
+              onClick={() => {
+                void onResendSignup()
+              }}
+            >
+              {resendBusy
+                ? '再送中…'
+                : resendCooldownLeftMs > 0
+                  ? `再送まで ${Math.ceil(resendCooldownLeftMs / 1000)} 秒`
+                  : '確認メールを再送する'}
+            </button>
+          </div>
+        ) : null}
         {awaitingEmailConfirmation ? (
           <div
             className={`cloud-login-email-await${lanRedirectHint ? ' cloud-login-email-await-lan' : ''}`}
@@ -262,11 +283,18 @@ export function CloudLoginScreen() {
             </span>
           </div>
         ) : null}
+        {import.meta.env.DEV ? (
         <p className="hint small cloud-login-foot">
           開発時は <code>.env</code> の <code>VITE_SUPABASE_URL</code> /{' '}
           <code>VITE_SUPABASE_ANON_KEY</code> を設定し、Supabase でテーブルと RLS を作成してください（
           <code>supabase/migrations</code> 参照）。
         </p>
+        ) : (
+          <p className="hint small cloud-login-foot cloud-login-foot-prod">
+            メールが届かない場合は迷惑メールを確認し、Supabase ダッシュボードの{' '}
+            <strong>Authentication → Emails</strong> でカスタム SMTP の利用も検討してください。
+          </p>
+        )}
       </div>
     </div>
   )

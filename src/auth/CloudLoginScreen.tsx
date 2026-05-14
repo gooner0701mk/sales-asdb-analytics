@@ -39,6 +39,20 @@ export function CloudLoginScreen() {
     return `${origin}/**`
   }, [])
 
+  /** 確認メールの戻り先表示用（AuthContext の VITE_AUTH_EMAIL_REDIRECT_URL と揃える） */
+  const authEmailRedirectOrigin = useMemo(() => {
+    const raw = import.meta.env.VITE_AUTH_EMAIL_REDIRECT_URL as string | undefined
+    if (raw?.trim()) {
+      try {
+        return new URL(raw.trim().replace(/^['"]+|['"]+$/g, '')).origin
+      } catch {
+        /* fall through */
+      }
+    }
+    if (typeof window === 'undefined') return ''
+    return window.location.origin
+  }, [])
+
   const onSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault()
@@ -206,15 +220,11 @@ export function CloudLoginScreen() {
               </li>
               <li>
                 メール内のリンクから戻る先は{' '}
-                <strong>
-                  {typeof window !== 'undefined' ? window.location.origin : 'このサイト'}
-                </strong>{' '}
+                <strong>{authEmailRedirectOrigin || 'このサイト'}</strong>
                 です。Supabase の <strong>Authentication → URL Configuration → Redirect URLs</strong>{' '}
                 に、このオリジンを含む行（例:{' '}
                 <code>
-                  {typeof window !== 'undefined'
-                    ? `${window.location.origin}/**`
-                    : 'https://（サイト）/**'}
+                  {authEmailRedirectOrigin ? `${authEmailRedirectOrigin}/**` : 'https://（サイト）/**'}
                 </code>
                 ）が<strong>必ず</strong>入っているか確認してください（未設定だとメールは届いてもリンク先で弾かれます）。
               </li>
@@ -294,6 +304,8 @@ export function CloudLoginScreen() {
             <p className="hint small cloud-login-foot cloud-login-foot-prod">
               メールが届かない場合は迷惑メールを確認し、Supabase ダッシュボードの{' '}
               <strong>Authentication → Emails</strong> でカスタム SMTP の利用も検討してください。
+              Vercel の環境変数に <code>VITE_AUTH_EMAIL_REDIRECT_URL</code> を本番のサイトURL（末尾{' '}
+              <code>/</code> 付き可）で入れると、確認メールのリンク先が常にそのURLになります。
             </p>
             <button
               type="button"

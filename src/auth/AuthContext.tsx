@@ -12,7 +12,25 @@ import { friendlyResendError, friendlySignInError, friendlySignUpError } from '.
 import { withAuthTimeout } from './authTimeout'
 import { clearSupabaseBrowserSession, getSupabase, isSupabaseConfigured } from '../supabaseClient'
 
-function emailRedirectToOrigin(): string | undefined {
+/**
+ * 確認メールの `emailRedirectTo` 用。
+ * - `VITE_AUTH_EMAIL_REDIRECT_URL` があれば最優先（本番URLを固定して Supabase の Redirect URLs と揃えやすくする）
+ * - なければ現在のページの origin（従来どおり）
+ */
+function emailRedirectToForAuth(): string | undefined {
+  const raw = import.meta.env.VITE_AUTH_EMAIL_REDIRECT_URL as string | undefined
+  if (raw != null && String(raw).trim() !== '') {
+    const t = String(raw).trim().replace(/^['"]+|['"]+$/g, '')
+    try {
+      const u = new URL(t)
+      if (u.protocol === 'https:' || u.protocol === 'http:') {
+        const base = `${u.origin}${u.pathname.replace(/\/+$/, '')}`
+        return `${base}/`
+      }
+    } catch {
+      /* 無視して window にフォールバック */
+    }
+  }
   if (typeof window === 'undefined') return undefined
   const { origin } = window.location
   if (!origin || origin === 'null') return undefined
@@ -102,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = useCallback(async (email: string, password: string) => {
     const sb = getSupabase()
     if (!sb) return { error: 'Supabase が未設定です', pendingEmailConfirmation: false }
-    const redirectTo = emailRedirectToOrigin()
+    const redirectTo = emailRedirectToForAuth()
     try {
       return await withAuthTimeout(async () => {
         const { data, error } = await sb.auth.signUp({
@@ -135,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resendSignupEmail = useCallback(async (email: string) => {
     const sb = getSupabase()
     if (!sb) return { error: 'Supabase が未設定です' }
-    const redirectTo = emailRedirectToOrigin()
+    const redirectTo = emailRedirectToForAuth()
     try {
       return await withAuthTimeout(async () => {
         const { error } = await sb.auth.resend({

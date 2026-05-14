@@ -3,19 +3,19 @@ import { stateToJson } from '../stateJson'
 import type { AppState } from '../types'
 import { normalizeStoredStateRecord } from '../storage'
 
+const SHARED_ROW_ID = 'default' as const
+
 /**
- * 旧: ユーザー1人1行の user_app_state。現在のクラウド同期は sharedAppState を使用。
- * Supabase の user_app_state.payload（JSON）を AppState にする。
- * 行がない・壊れている場合は null。
+ * Supabase の shared_app_state（会社共有・1行）の payload を AppState にする。
  */
-export async function fetchUserAppState(userId: string): Promise<AppState | null> {
+export async function fetchSharedAppState(): Promise<AppState | null> {
   const sb = getSupabase()
   if (!sb) return null
 
   const { data, error } = await sb
-    .from('user_app_state')
+    .from('shared_app_state')
     .select('payload')
-    .eq('user_id', userId)
+    .eq('id', SHARED_ROW_ID)
     .maybeSingle()
 
   if (error) throw error
@@ -34,21 +34,21 @@ export async function fetchUserAppState(userId: string): Promise<AppState | null
   }
 }
 
-export async function upsertUserAppState(
-  userId: string,
-  state: AppState,
-): Promise<void> {
+/**
+ * 会社共有の payload を保存（最後の保存が優先。同時編集は想定外の取りこぼしあり得る）。
+ */
+export async function upsertSharedAppState(state: AppState): Promise<void> {
   const sb = getSupabase()
   if (!sb) return
 
   const payload = JSON.parse(stateToJson(state)) as Record<string, unknown>
-  const { error } = await sb.from('user_app_state').upsert(
+  const { error } = await sb.from('shared_app_state').upsert(
     {
-      user_id: userId,
+      id: SHARED_ROW_ID,
       payload,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'user_id' },
+    { onConflict: 'id' },
   )
 
   if (error) throw error

@@ -123,7 +123,7 @@ export function CloudLoginScreen() {
       >
         <h1 className="cloud-login-title">営業データ分析</h1>
         <p className="cloud-login-lead">
-          クラウド保存モードです。アカウントにログインすると、データは Supabase 上のあなた専用の領域に保存されます。
+          クラウド保存モードです。ログインした<strong>社員全員で同じデータ</strong>を共有します（Supabase の共有ストアに保存されます）。
         </p>
         <p className="hint small cloud-login-rate-hint">
           登録や確認メールの再送を短時間に繰り返すと、セキュリティのため一時的にブロックされることがあります（

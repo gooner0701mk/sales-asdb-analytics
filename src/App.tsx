@@ -78,7 +78,7 @@ import {
   sampleState,
   saveState,
 } from './storage'
-import { fetchUserAppState, upsertUserAppState } from './cloud/userAppState'
+import { fetchSharedAppState, upsertSharedAppState } from './cloud/sharedAppState'
 import { isSupabaseConfigured } from './supabaseClient'
 import { useAuth } from './auth/AuthContext'
 import { CloudLoginScreen } from './auth/CloudLoginScreen'
@@ -195,8 +195,7 @@ function usePersistentAppState(): {
       setDataReady(true)
       return
     }
-    const userId = auth.user?.id
-    if (!userId) {
+    if (!auth.user?.id) {
       setDataReady(false)
       return
     }
@@ -205,7 +204,7 @@ function usePersistentAppState(): {
     setDataReady(false)
     void (async () => {
       try {
-        const remote = await fetchUserAppState(userId)
+        const remote = await fetchSharedAppState()
         if (cancelled) return
         setState(remote ?? emptyState())
       } catch (e) {
@@ -231,13 +230,12 @@ function usePersistentAppState(): {
       saveState(state)
       return
     }
-    const userId = auth.user?.id
-    if (!userId) return
+    if (!auth.user?.id) return
     let cancelled = false
     const id = window.setTimeout(() => {
       if (cancelled) return
       setCloudSave((s) => ({ ...s, phase: 'syncing' }))
-      void upsertUserAppState(userId, state).then(
+      void upsertSharedAppState(state).then(
         () => {
           if (!cancelled) setCloudSave({ phase: 'ok', lastOkAt: Date.now() })
         },
@@ -262,7 +260,7 @@ function usePersistentAppState(): {
     if (!auth.configured || !auth.user?.id) return
     setCloudSave((s) => ({ ...s, phase: 'syncing' }))
     try {
-      await upsertUserAppState(auth.user.id, stateRef.current)
+      await upsertSharedAppState(stateRef.current)
       setCloudSave({ phase: 'ok', lastOkAt: Date.now() })
       showToast('クラウドへ保存しました')
     } catch (e) {

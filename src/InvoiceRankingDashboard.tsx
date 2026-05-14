@@ -5,8 +5,6 @@ import {
   CartesianGrid,
   Cell,
   Legend,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -32,6 +30,7 @@ import { fyStartYearFromCalendarYm } from './fiscalYear'
 import { dataViewSummaryLabel } from './dataViewSelection'
 import { useInvoiceCalendarPeriodAutoSync } from './useInvoiceCalendarPeriodAutoSync'
 import { useMediaQuery } from './useMediaQuery'
+import { PieWithHoverOrTap } from './PieWithHoverOrTap'
 import type { CompanySettings, DataViewUserIds, Invoice, User } from './types'
 
 const PIE_COLORS = [
@@ -170,9 +169,8 @@ export function InvoiceRankingDashboard({
   const emptySelection =
     dataViewUserIds !== 'all' && dataViewUserIds.length === 0
 
-  /** マウスホバー前提の環境では hover、タッチ中心では tap でツールチップ */
+  /** マウスホバー前提の環境ではホバーでツールチップ。タッチ中心ではタップ＋下のパネル */
   const pieTooltipFinePointer = useMediaQuery('(hover: hover) and (pointer: fine)')
-  const pieTooltipTrigger = pieTooltipFinePointer ? 'hover' : 'click'
 
   const companySharePieTooltip = useCallback((props: Record<string, unknown>) => {
     if (!props.active || !Array.isArray(props.payload) || props.payload.length === 0) {
@@ -359,35 +357,33 @@ export function InvoiceRankingDashboard({
           </h3>
           <p className="hint small invoice-rankings-pie-hint">
             取引先名と割合は、PC
-            ではスライスにカーソルを合わせると、スマホ・タブレットではスライスをタップすると表示されます。
+            ではスライスにカーソルを合わせると表示されます。スマホ・タブレットではスライスをタップすると<strong>グラフの下</strong>に詳細が出ます（閉じるで消えます）。
           </p>
           {clientSharePieSlices.length === 0 ? (
             <div className="chart-placeholder">この期間の請求がありません</div>
           ) : (
             <div className="invoice-rankings-rc-host invoice-rankings-share-pie-wrap">
-              <ResponsiveContainer width="100%" height={320} debounce={80} minWidth={0}>
-                <PieChart>
-                  <Pie
-                    data={clientSharePieSlices}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="48%"
-                    outerRadius={108}
-                    paddingAngle={1}
-                    isAnimationActive={false}
-                  >
-                    {clientSharePieSlices.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    content={companySharePieTooltip}
-                    trigger={pieTooltipTrigger}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="bottom" />
-                </PieChart>
-              </ResponsiveContainer>
+              <PieWithHoverOrTap
+                data={clientSharePieSlices}
+                height={320}
+                colors={PIE_COLORS}
+                isFinePointer={pieTooltipFinePointer}
+                tooltipContent={companySharePieTooltip}
+                formatYen={formatYen}
+                mobileFootnote={(d) =>
+                  typeof d.sharePercent === 'number'
+                    ? `表示スコープ内シェア: ${d.sharePercent}％`
+                    : null
+                }
+                cx="50%"
+                cy="48%"
+                outerRadius={108}
+                paddingAngle={1}
+                isAnimationActive={false}
+                legend={<Legend wrapperStyle={{ fontSize: 11 }} verticalAlign="bottom" />}
+                debounceMs={80}
+                minWidth={0}
+              />
             </div>
           )}
 
@@ -395,7 +391,7 @@ export function InvoiceRankingDashboard({
             請求額が多い担当上位5名の取引先構成（各取引先TOP5＋その他）
           </h3>
           <p className="hint small invoice-rankings-pie-hint">
-            各グラフも同様に、ホバーまたはタップで取引先名と金額・割合を表示します。
+            各グラフも同様です（PC はホバー、スマホ・タブレットはタップでグラフ下に詳細）。
           </p>
           {top5UsersForPies.length === 0 ? (
             <div className="chart-placeholder">この期間の請求がありません</div>
@@ -413,29 +409,27 @@ export function InvoiceRankingDashboard({
                       <div className="chart-placeholder">データなし</div>
                     ) : (
                       <div className="invoice-rankings-rc-host invoice-rankings-pie-rc">
-                        <ResponsiveContainer width="100%" height={220} debounce={80} minWidth={0}>
-                          <PieChart>
-                            <Pie
-                              data={slices}
-                              dataKey="value"
-                              nameKey="name"
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={44}
-                              outerRadius={78}
-                              paddingAngle={1}
-                              isAnimationActive={false}
-                            >
-                              {slices.map((_, i) => (
-                                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip
-                              content={pieTooltip}
-                              trigger={pieTooltipTrigger}
-                            />
-                          </PieChart>
-                        </ResponsiveContainer>
+                        <PieWithHoverOrTap
+                          data={slices}
+                          height={220}
+                          colors={PIE_COLORS}
+                          isFinePointer={pieTooltipFinePointer}
+                          tooltipContent={pieTooltip}
+                          formatYen={formatYen}
+                          mobileFootnote={(d) =>
+                            typeof d.shareOfUserPercent === 'number'
+                              ? `この担当の期間内合計: ${d.shareOfUserPercent}％`
+                              : null
+                          }
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={44}
+                          outerRadius={78}
+                          paddingAngle={1}
+                          isAnimationActive={false}
+                          debounceMs={80}
+                          minWidth={0}
+                        />
                       </div>
                     )}
                   </div>

@@ -7,14 +7,7 @@ import {
   type FormEvent,
   type SetStateAction,
 } from 'react'
-import {
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-} from 'recharts'
+import { Legend } from 'recharts'
 import { formatDateJa, todayIsoDate } from './dates'
 import {
   type InvoicePeriodMode,
@@ -42,6 +35,7 @@ import { InvoiceRevenueTargetSidebar } from './InvoiceRevenueTargetSidebar'
 import { SectionErrorBoundary } from './SectionErrorBoundary'
 import { useInvoiceCalendarPeriodAutoSync } from './useInvoiceCalendarPeriodAutoSync'
 import { useMediaQuery } from './useMediaQuery'
+import { PieWithHoverOrTap } from './PieWithHoverOrTap'
 import type {
   AppState,
   CompanySettings,
@@ -221,7 +215,6 @@ export function InvoicesTab({
 
   const narrowLayout = useMediaQuery('(max-width: 960px)')
   const pieTooltipFinePointer = useMediaQuery('(hover: hover) and (pointer: fine)')
-  const pieTooltipTrigger = pieTooltipFinePointer ? 'hover' : 'click'
 
   const pieByUser = useMemo(
     () =>
@@ -571,35 +564,32 @@ export function InvoicesTab({
             </p>
           ) : (
             <div className="invoices-pie-single" aria-label="担当別の請求金額の内訳">
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={pieByUser}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="48%"
-                    innerRadius={52}
-                    outerRadius={100}
-                    paddingAngle={1}
-                    isAnimationActive={false}
-                  >
-                    {pieByUser.map((_, i) => (
-                      <Cell
-                        key={`cell-${i}`}
-                        fill={PIE_COLORS[i % PIE_COLORS.length]}
-                        stroke="var(--surface)"
-                        strokeWidth={1}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip content={pieTooltipByUser} trigger={pieTooltipTrigger} />
+              <PieWithHoverOrTap
+                data={pieByUser}
+                height={300}
+                colors={PIE_COLORS}
+                isFinePointer={pieTooltipFinePointer}
+                tooltipContent={pieTooltipByUser}
+                formatYen={formatYen}
+                mobileFootnote={(d) =>
+                  typeof d.share === 'number'
+                    ? `表示中の合計に対する割合: ${d.share}％`
+                    : null
+                }
+                cx="50%"
+                cy="48%"
+                innerRadius={52}
+                outerRadius={100}
+                paddingAngle={1}
+                isAnimationActive={false}
+                cellStroke="var(--surface)"
+                legend={
                   <Legend
                     verticalAlign="bottom"
                     formatter={(value) => String(value)}
                   />
-                </PieChart>
-              </ResponsiveContainer>
+                }
+              />
             </div>
           )}
         </div>
@@ -645,38 +635,32 @@ export function InvoicesTab({
             </p>
           ) : (
             <div className="invoices-pie-single" aria-label="取引先別の表示中合計に対するシェア">
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={clientScopePieSlices}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="48%"
-                    innerRadius={52}
-                    outerRadius={100}
-                    paddingAngle={1}
-                    isAnimationActive={false}
-                  >
-                    {clientScopePieSlices.map((_, i) => (
-                      <Cell
-                        key={`scope-client-${i}`}
-                        fill={PIE_COLORS[i % PIE_COLORS.length]}
-                        stroke="var(--surface)"
-                        strokeWidth={1}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    content={pieTooltipCompanyClientShare}
-                    trigger={pieTooltipTrigger}
-                  />
+              <PieWithHoverOrTap
+                data={clientScopePieSlices}
+                height={300}
+                colors={PIE_COLORS}
+                isFinePointer={pieTooltipFinePointer}
+                tooltipContent={pieTooltipCompanyClientShare}
+                formatYen={formatYen}
+                mobileFootnote={(d) =>
+                  typeof d.sharePercent === 'number'
+                    ? `表示中の合計に対する割合: ${d.sharePercent}％`
+                    : null
+                }
+                cx="50%"
+                cy="48%"
+                innerRadius={52}
+                outerRadius={100}
+                paddingAngle={1}
+                isAnimationActive={false}
+                cellStroke="var(--surface)"
+                legend={
                   <Legend
                     verticalAlign="bottom"
                     formatter={(value) => String(value)}
                   />
-                </PieChart>
-              </ResponsiveContainer>
+                }
+              />
             </div>
           )}
         </div>
@@ -707,39 +691,33 @@ export function InvoicesTab({
                     <p className="hint small">内訳なし</p>
                   ) : (
                     <div className="invoices-pie-mini-wrap">
-                      <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                          <Pie
-                            data={pieData}
-                            dataKey="value"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={0}
-                            outerRadius={72}
-                            paddingAngle={1}
-                            isAnimationActive={false}
-                          >
-                            {pieData.map((_, i) => (
-                              <Cell
-                                key={`uc-${u.userId}-${i}`}
-                                fill={PIE_COLORS[i % PIE_COLORS.length]}
-                                stroke="var(--surface)"
-                                strokeWidth={1}
-                              />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            content={pieTooltipUserClientShare}
-                            trigger={pieTooltipTrigger}
-                          />
+                      <PieWithHoverOrTap
+                        data={pieData}
+                        height={200}
+                        colors={PIE_COLORS}
+                        isFinePointer={pieTooltipFinePointer}
+                        tooltipContent={pieTooltipUserClientShare}
+                        formatYen={formatYen}
+                        mobileFootnote={(d) =>
+                          typeof d.shareOfUserPercent === 'number'
+                            ? `この担当の期間内合計に対する割合: ${d.shareOfUserPercent}％`
+                            : null
+                        }
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={0}
+                        outerRadius={72}
+                        paddingAngle={1}
+                        isAnimationActive={false}
+                        cellStroke="var(--surface)"
+                        legend={
                           <Legend
                             layout="horizontal"
                             verticalAlign="bottom"
                             formatter={(value) => String(value)}
                           />
-                        </PieChart>
-                      </ResponsiveContainer>
+                        }
+                      />
                     </div>
                   )}
                 </div>

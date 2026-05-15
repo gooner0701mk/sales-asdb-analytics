@@ -28,6 +28,7 @@ import {
 } from './approachTargets'
 import { createId } from './createId'
 import { aggregateByMonth, filterActivities } from './aggregate'
+import { colorForActivityTypeId } from './activityChartColors'
 import {
   activitiesToCSV,
   downloadCSV,
@@ -63,13 +64,13 @@ import {
   type PeriodGroupMode,
 } from './periodGroup'
 import {
+  buildUserCompareTabs,
+  isLeadSourcesCompareTab,
   leadStackKeysFromCatalog,
-  USER_COMPARE_TABS,
   buildLeadSourceStackRows,
   buildUserPeriodTotals,
   leadStackLabel,
   tabValueForUser,
-  type UserCompareTabId,
 } from './userCompareMetrics'
 import { mergeActivityCsvIntoState, parseStateJson, stateToJson } from './stateJson'
 import {
@@ -91,10 +92,9 @@ import type {
   DataViewUserIds,
 } from './types'
 import {
-  ACTIVITY_TYPES_ORDER,
-  activityTypeDisplayLabel,
   emptyMilestones,
   emptyState,
+  labelForActivityTypeId,
   labelForLeadSourceId,
   newUser,
 } from './types'
@@ -305,7 +305,7 @@ function DashboardApp({
     companySettings,
     estimateTasks,
     leadSourceCatalog,
-    activityTypeLabels,
+    activityTypeCatalog,
   } = state
 
   const fiscalSm = companySettings.fiscalYearStartMonth
@@ -368,8 +368,39 @@ function DashboardApp({
   const [syncApproach, setSyncApproach] = useState(true)
   const [syncOrderDate, setSyncOrderDate] = useState(true)
   const [periodGroup, setPeriodGroup] = useState<PeriodGroupMode>('month')
-  const [userCompareTab, setUserCompareTab] =
-    useState<UserCompareTabId>('salesActs')
+  const activityTypeIds = useMemo(
+    () => activityTypeCatalog.map((c) => c.id),
+    [activityTypeCatalog],
+  )
+
+  const activityTypeIdSet = useMemo(
+    () => new Set(activityTypeIds),
+    [activityTypeIds],
+  )
+
+  useEffect(() => {
+    setFormType((cur) => {
+      if (activityTypeIdSet.has(cur)) return cur
+      return (
+        activityTypeCatalog.find((x) => x.id === 'teleAppo')?.id ??
+        activityTypeCatalog[0]?.id ??
+        'teleAppo'
+      )
+    })
+  }, [activityTypeIdSet, activityTypeCatalog])
+
+  const userCompareTabs = useMemo(
+    () => buildUserCompareTabs(activityTypeCatalog),
+    [activityTypeCatalog],
+  )
+
+  const [userCompareTab, setUserCompareTab] = useState<string>('salesActs')
+
+  useEffect(() => {
+    if (!userCompareTabs.some((t) => t.id === userCompareTab)) {
+      setUserCompareTab('salesActs')
+    }
+  }, [userCompareTabs, userCompareTab])
   /** 月次モード時、カードが参照する暦月（YYYY-MM） */
   const [focusMonthYm, setFocusMonthYm] = useState(() =>
     todayIsoDate().slice(0, 7),
@@ -449,13 +480,13 @@ function DashboardApp({
   )
 
   const months = useMemo(
-    () => aggregateByMonth(visibleActivities),
-    [visibleActivities],
+    () => aggregateByMonth(visibleActivities, activityTypeIds),
+    [visibleActivities, activityTypeIds],
   )
 
   const bucketedMonths = useMemo(
-    () => rollupPeriodBuckets(months, periodGroup, fiscalSm),
-    [months, periodGroup, fiscalSm],
+    () => rollupPeriodBuckets(months, periodGroup, fiscalSm, activityTypeIds),
+    [months, periodGroup, fiscalSm, activityTypeIds],
   )
 
   /** 表示単位に合わせたカード用の集計（月次＝選んだ暦月、年次＝選択した会計年度、合計＝全期間） */
@@ -559,6 +590,7 @@ function DashboardApp({
       buildUserPeriodTotals(
         users,
         activities,
+        activityTypeIds,
         periodGroup,
         focusMonthYm,
         todayIsoDate(),
@@ -568,6 +600,7 @@ function DashboardApp({
     [
       users,
       activities,
+      activityTypeIds,
       periodGroup,
       focusMonthYm,
       calendarTick,
@@ -577,15 +610,16 @@ function DashboardApp({
   )
 
   const userCompareBarRows = useMemo(() => {
-    if (userCompareTab === 'leadSources') return []
+    if (isLeadSourcesCompareTab(userCompareTab)) return []
     return userPeriodTotals.map((row) => ({
       name: row.displayName,
-      value: tabValueForUser(
-        row,
-        userCompareTab as Exclude<UserCompareTabId, 'leadSources'>,
-      ),
+      value: tabValueForUser(row, userCompareTab, activityTypeCatalog),
     }))
-  }, [userPeriodTotals, userCompareTab])
+  }, [
+    userPeriodTotals,
+    userCompareTab,
+    activityTypeCatalog,
+  ])
 
   const userCompareLeadStack = useMemo(
     () =>
@@ -611,7 +645,7 @@ function DashboardApp({
     ],
   )
 
-  const userCompareTabKind = USER_COMPARE_TABS.find(
+  const userCompareTabKind = userCompareTabs.find(
     (t) => t.id === userCompareTab,
   )?.kind
 
@@ -644,12 +678,21 @@ function DashboardApp({
     },
     [maxFocusMonthYm],
   )
-  const approaches = useMemo(() => totalApproaches(totals), [totals])
-  const salesActs = useMemo(() => totalSalesActivities(totals), [totals])
-  const funnel = useMemo(() => periodFunnel(totals), [totals])
+  const approaches = useMemo(
+    () => totalApproaches(totals, activityTypeCatalog),
+    [totals, activityTypeCatalog],
+  )
+  const salesActs = useMemo(
+    () => totalSalesActivities(totals, activityTypeCatalog),
+    [totals, activityTypeCatalog],
+  )
+  const funnel = useMemo(
+    () => periodFunnel(totals, activityTypeCatalog),
+    [totals, activityTypeCatalog],
+  )
   const rateQuotePerSales = useMemo(
-    () => quotesPerSalesActivityRate(totals),
-    [totals],
+    () => quotesPerSalesActivityRate(totals, activityTypeCatalog),
+    [totals, activityTypeCatalog],
   )
   const rateOrderPerQuote = useMemo(() => ordersPerQuoteRate(totals), [totals])
 
@@ -657,15 +700,7 @@ function DashboardApp({
 
   const dashboardChartSlices = useMemo(() => {
     type ChartRow = ReturnType<typeof chartRows>[number]
-    type BarRow = {
-      name: string
-      coldVisits: number
-      teleAppo: number
-      meetings: number
-      receptions: number
-      quotes: number
-      closedWon: number
-    }
+    type BarRow = Record<string, string | number>
     type Slice = {
       chartData: ChartRow[]
       barComparisonRows: BarRow[]
@@ -698,21 +733,25 @@ function DashboardApp({
 
     for (const id of DASHBOARD_TREND_CHART_IDS) {
       const sliced = sliceBucketedFor(trendChartEndYmById[id])
-      const chartData = chartRows(sliced)
+      const chartData = chartRows(sliced, activityTypeCatalog)
       const slanted = periodGroup !== 'month' || chartData.length > 10
       const angle = slanted ? -22 : 0
       const textAnchor = slanted ? ('end' as const) : ('middle' as const)
       result[id] = {
         chartData,
-        barComparisonRows: chartData.map((row) => ({
-          name: row.label,
-          coldVisits: row.coldVisits,
-          teleAppo: row.teleAppo,
-          meetings: row.meetings,
-          receptions: row.receptions,
-          quotes: row.quotes,
-          closedWon: row.closedWon,
-        })),
+        barComparisonRows: chartData.map((row) => {
+          const bar: BarRow = {
+            name: row.label,
+            quotes: row.quotes,
+            closedWon: row.closedWon,
+          }
+          const r = row as Record<string, number | string>
+          for (const { id: atId } of activityTypeCatalog) {
+            const v = r[atId]
+            bar[atId] = typeof v === 'number' ? v : 0
+          }
+          return bar
+        }),
         hasData: sliced.length > 0,
         lineXAxisProps: {
           dataKey: 'label',
@@ -733,7 +772,13 @@ function DashboardApp({
       }
     }
     return result
-  }, [bucketedMonths, periodGroup, trendChartEndYmById, maxFocusMonthYm])
+  }, [
+    bucketedMonths,
+    periodGroup,
+    trendChartEndYmById,
+    maxFocusMonthYm,
+    activityTypeCatalog,
+  ])
 
   const trendChartMonthToolbar = useCallback(
     (id: DashboardTrendChartId) => {
@@ -990,7 +1035,12 @@ function DashboardApp({
     reader.onload = () => {
       try {
         const text = String(reader.result ?? '')
-        const next = parseActivityCSV(text, defaultCsvUserId, leadSourceIdSet)
+        const next = parseActivityCSV(
+          text,
+          defaultCsvUserId,
+          leadSourceIdSet,
+          activityTypeIdSet,
+        )
         if (next.length === 0) throw new Error('有効な行がありません')
         setState((prev) => mergeActivityCsvIntoState(prev, next))
         showToast(`活動${next.length}件を取り込みました`)
@@ -1329,9 +1379,9 @@ function DashboardApp({
                     setFormType(e.target.value as ActivityType)
                   }
                 >
-                  {ACTIVITY_TYPES_ORDER.map((k) => (
-                    <option key={k} value={k}>
-                      {activityTypeDisplayLabel(activityTypeLabels, k)}
+                  {activityTypeCatalog.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label}
                     </option>
                   ))}
                 </select>
@@ -1403,7 +1453,7 @@ function DashboardApp({
                     <div className="activity-meta">
                       <span className="activity-date">{a.date}</span>
                       <span className="activity-type-pill">
-                        {activityTypeDisplayLabel(activityTypeLabels, a.activityType)}
+                        {labelForActivityTypeId(activityTypeCatalog, a.activityType)}
                       </span>
                       {a.leadSource && (
                         <span className="activity-lead-pill" title="流入経路">
@@ -1663,9 +1713,7 @@ function DashboardApp({
               <h3>営業件数（合計）</h3>
               <p className="card-value">{salesActs.toLocaleString()}</p>
               <p className="card-note">
-                {ACTIVITY_TYPES_ORDER.map((k) =>
-                  activityTypeDisplayLabel(activityTypeLabels, k),
-                ).join('＋')}
+                {activityTypeCatalog.map((row) => row.label).join('＋')}
               </p>
             </article>
             <article className="card">
@@ -1678,22 +1726,14 @@ function DashboardApp({
               <p className="card-value">{rateOrderPerQuote}%</p>
               <p className="card-note">見積0の月は0%</p>
             </article>
-            <article className="card">
-              <h3>{activityTypeDisplayLabel(activityTypeLabels, 'coldVisit')}</h3>
-              <p className="card-value">{totals.coldVisits.toLocaleString()}</p>
-            </article>
-            <article className="card">
-              <h3>{activityTypeDisplayLabel(activityTypeLabels, 'teleAppo')}</h3>
-              <p className="card-value">{totals.teleAppo.toLocaleString()}</p>
-            </article>
-            <article className="card">
-              <h3>{activityTypeDisplayLabel(activityTypeLabels, 'meeting')}</h3>
-              <p className="card-value">{totals.meetings.toLocaleString()}</p>
-            </article>
-            <article className="card">
-              <h3>{activityTypeDisplayLabel(activityTypeLabels, 'reception')}</h3>
-              <p className="card-value">{totals.receptions.toLocaleString()}</p>
-            </article>
+            {activityTypeCatalog.map((row) => (
+              <article key={row.id} className="card">
+                <h3>{row.label}</h3>
+                <p className="card-value">
+                  {(totals.activityCounts[row.id] ?? 0).toLocaleString()}
+                </p>
+              </article>
+            ))}
             <article className="card">
               <h3>見積もり（合計）</h3>
               <p className="card-value">{totals.quotes.toLocaleString()}</p>
@@ -1935,38 +1975,17 @@ function DashboardApp({
                       <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                       <Tooltip />
                       <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="coldVisits"
-                        name={activityTypeDisplayLabel(activityTypeLabels, 'coldVisit')}
-                        stroke={c.coldVisit}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="teleAppo"
-                        name={activityTypeDisplayLabel(activityTypeLabels, 'teleAppo')}
-                        stroke={c.teleAppo}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="meetings"
-                        name={activityTypeDisplayLabel(activityTypeLabels, 'meeting')}
-                        stroke={c.meeting}
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="receptions"
-                        name={activityTypeDisplayLabel(activityTypeLabels, 'reception')}
-                        stroke={c.reception}
-                        strokeWidth={2}
-                        dot={false}
-                      />
+                      {activityTypeCatalog.map((row, i) => (
+                        <Line
+                          key={row.id}
+                          type="monotone"
+                          dataKey={row.id}
+                          name={row.label}
+                          stroke={colorForActivityTypeId(row.id, i, c)}
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      ))}
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
@@ -2119,9 +2138,7 @@ function DashboardApp({
             <div className="panel full">
               <h2>
                 {periodChartTitle}：件数比較（
-                {ACTIVITY_TYPES_ORDER.map((k) =>
-                  activityTypeDisplayLabel(activityTypeLabels, k),
-                ).join('・')}
+                {activityTypeCatalog.map((row) => row.label).join('・')}
                 ・見積・受注）
               </h2>
               {trendChartMonthToolbar('countsBar')}
@@ -2146,30 +2163,15 @@ function DashboardApp({
                       <YAxis allowDecimals={false} />
                       <Tooltip />
                       <Legend />
-                      <Bar
-                        dataKey="coldVisits"
-                        name={activityTypeDisplayLabel(activityTypeLabels, 'coldVisit')}
-                        fill={c.coldVisit}
-                        radius={[4, 4, 0, 0]}
-                      />
-                      <Bar
-                        dataKey="teleAppo"
-                        name={activityTypeDisplayLabel(activityTypeLabels, 'teleAppo')}
-                        fill={c.teleAppo}
-                        radius={[4, 4, 0, 0]}
-                      />
-                      <Bar
-                        dataKey="meetings"
-                        name={activityTypeDisplayLabel(activityTypeLabels, 'meeting')}
-                        fill={c.meeting}
-                        radius={[4, 4, 0, 0]}
-                      />
-                      <Bar
-                        dataKey="receptions"
-                        name={activityTypeDisplayLabel(activityTypeLabels, 'reception')}
-                        fill={c.reception}
-                        radius={[4, 4, 0, 0]}
-                      />
+                      {activityTypeCatalog.map((row, i) => (
+                        <Bar
+                          key={row.id}
+                          dataKey={row.id}
+                          name={row.label}
+                          fill={colorForActivityTypeId(row.id, i, c)}
+                          radius={[4, 4, 0, 0]}
+                        />
+                      ))}
                       <Bar dataKey="quotes" name="見積もり" fill={c.quote} radius={[4, 4, 0, 0]} />
                       <Bar dataKey="closedWon" name="受注" fill={c.closedWon} radius={[4, 4, 0, 0]} />
                     </BarChart>
@@ -2188,7 +2190,7 @@ function DashboardApp({
               で各ユーザーの活動ログを集計しています（「自分のみ／全員」の切替とは独立し、常に全ユーザーを並べます）。
             </p>
             <div className="user-compare-tablist" role="tablist" aria-label="比較する項目">
-              {USER_COMPARE_TABS.map((tab) => (
+              {userCompareTabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
@@ -2202,7 +2204,7 @@ function DashboardApp({
               ))}
             </div>
             <div className="chart-wrap user-compare-chart">
-              {userCompareTab === 'leadSources' ? (
+              {isLeadSourcesCompareTab(userCompareTab) ? (
                 users.length === 0 ? (
                   <div className="chart-placeholder">ユーザーがありません</div>
                 ) : (
@@ -2264,10 +2266,20 @@ function DashboardApp({
                     <Bar
                       dataKey="value"
                       name={
-                        USER_COMPARE_TABS.find((t) => t.id === userCompareTab)
+                        userCompareTabs.find((t) => t.id === userCompareTab)
                           ?.label ?? ''
                       }
-                      fill={c.teleAppo}
+                      fill={(() => {
+                        const i = activityTypeCatalog.findIndex(
+                          (x) => x.id === userCompareTab,
+                        )
+                        if (i >= 0) {
+                          return colorForActivityTypeId(userCompareTab, i, c)
+                        }
+                        return userCompareTabKind === 'percent'
+                          ? c.quote
+                          : c.teleAppo
+                      })()}
                       radius={[6, 6, 0, 0]}
                     />
                   </BarChart>
@@ -2335,7 +2347,7 @@ function DashboardApp({
           users={users}
           companySettings={companySettings}
           leadSourceCatalog={leadSourceCatalog}
-          activityTypeLabels={activityTypeLabels}
+          activityTypeCatalog={activityTypeCatalog}
           setState={setState}
           showToast={showToast}
         />

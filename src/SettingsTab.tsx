@@ -7,7 +7,8 @@ import {
 import { todayIsoDate } from './dates'
 import { createId } from './createId'
 import type {
-  ActivityType,
+  ActivityAnalysisRole,
+  ActivityTypeCatalogItem,
   AppState,
   CompanySettings,
   SelectOptionItem,
@@ -15,11 +16,11 @@ import type {
 } from './types'
 import {
   ACTIVITY_TYPE_LABEL,
-  ACTIVITY_TYPES_ORDER,
+  BUILTIN_ACTIVITY_IDS,
   DEFAULT_COMPANY_SETTINGS,
   LEAD_SOURCE_LABEL,
   LEAD_SOURCES,
-  activityTypeDisplayLabel,
+  defaultActivityTypeCatalog,
 } from './types'
 
 const MONTH_LABELS = [
@@ -41,11 +42,32 @@ function slugLeadId(raw: string): string {
   return t.slice(0, 48) || `ls-${createId().slice(0, 10)}`
 }
 
+function isBuiltinActivityId(id: string): boolean {
+  return (BUILTIN_ACTIVITY_IDS as readonly string[]).includes(id)
+}
+
+function slugActivityTypeId(raw: string): string {
+  const t = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+  return t.slice(0, 48) || `at-${createId().replace(/-/g, '').slice(0, 10)}`
+}
+
+const ROLE_OPTION_LABEL: Record<ActivityAnalysisRole, string> = {
+  approach: 'アプローチ（転換率の母集団）',
+  meeting: '商談（転換率・商談件数）',
+  reception: '接待',
+  general: 'その他（件数のみ）',
+}
+
 type Props = {
   users: User[]
   companySettings: CompanySettings
   leadSourceCatalog: SelectOptionItem[]
-  activityTypeLabels: Partial<Record<ActivityType, string>>
+  activityTypeCatalog: ActivityTypeCatalogItem[]
   setState: Dispatch<SetStateAction<AppState>>
   showToast: (msg: string) => void
 }
@@ -54,7 +76,7 @@ export function SettingsTab({
   users,
   companySettings,
   leadSourceCatalog,
-  activityTypeLabels,
+  activityTypeCatalog,
   setState,
   showToast,
 }: Props) {
@@ -63,8 +85,13 @@ export function SettingsTab({
     Object.fromEntries(users.map((u) => [u.id, u.name])),
   )
   const [leadDraft, setLeadDraft] = useState<SelectOptionItem[]>(leadSourceCatalog)
-  const [typeLabelsDraft, setTypeLabelsDraft] =
-    useState<Partial<Record<ActivityType, string>>>(activityTypeLabels)
+  const [activityDraft, setActivityDraft] = useState<ActivityTypeCatalogItem[]>(
+    () => activityTypeCatalog.map((x) => ({ ...x })),
+  )
+
+  useEffect(() => {
+    setActivityDraft(activityTypeCatalog.map((x) => ({ ...x })))
+  }, [activityTypeCatalog])
 
   useEffect(() => {
     setDraftCompany(companySettings)
@@ -86,10 +113,6 @@ export function SettingsTab({
   useEffect(() => {
     setLeadDraft(leadSourceCatalog)
   }, [leadSourceCatalog])
-
-  useEffect(() => {
-    setTypeLabelsDraft(activityTypeLabels)
-  }, [activityTypeLabels])
 
   const previewFy = fyStartYearFromCalendarYm(todayIsoDate().slice(0, 7), draftCompany.fiscalYearStartMonth)
   const previewTerm = fiscalTermNumberForStartYear(
@@ -158,15 +181,79 @@ export function SettingsTab({
     showToast('流入経路を保存しました')
   }, [leadDraft, setState, showToast])
 
-  const saveActivityTypeLabels = useCallback(() => {
-    const next: Partial<Record<ActivityType, string>> = {}
-    for (const t of ACTIVITY_TYPES_ORDER) {
-      const v = typeLabelsDraft[t]?.trim()
-      if (v) next[t] = v
+  const saveActivityCatalog = useCallback(() => {
+    const defaults = defaultActivityTypeCatalog()
+    const draftBuiltin = new Map(
+      activityDraft
+        .filter((r) => isBuiltinActivityId(r.id))
+        .map((r) => [r.id, r]),
+    )
+    const head: ActivityTypeCatalogItem[] = defaults.map((d) => {
+      const hit = draftBuiltin.get(d.id)
+      const label = (hit?.label ?? d.label).trim() || d.label
+      return { id: d.id, label, role: d.role }
+    })
+    const used = new Set(head.map((h) => h.id))
+    const tail: ActivityTypeCatalogItem[] = []
+    for (const row of activityDraft) {
+      if (isBuiltinActivityId(row.id)) continue
+      let id = row.id.trim() ? slugActivityTypeId(row.id) : ''
+      if (!id) id = slugActivityTypeId(row.label || 'type')
+      if (!id) id = `at-${createId().replace(/-/g, '').slice(0, 8)}`
+      while (used.has(id)) {
+        id = `at-${createId().replace(/-/g, '').slice(0, 8)}`
+      }
+      used.add(id)
+      const label = row.label.trim() || id
+      let role: ActivityAnalysisRole = 'general'
+      if (
+        row.role === 'approach' ||
+        row.role === 'meeting' ||
+        row.role === 'reception' ||
+        row.role === 'general'
+      ) {
+        role = row.role
+      }
+      tail.push({ id, label, role })
     }
-    setState((prev) => ({ ...prev, activityTypeLabels: next }))
-    showToast('営業種類の表示名を保存しました')
-  }, [typeLabelsDraft, setState, showToast])
+    const nextCatalog = [...head, ...tail]
+    const idSet = new Set(nextCatalog.map((x) => x.id))
+    const fallback =
+      nextCatalog.find((x) => x.id === 'teleAppo')?.id ??
+      nextCatalog[0]?.id ??
+      'teleAppo'
+    setState((prev) => ({
+      ...prev,
+      activityTypeCatalog: nextCatalog,
+      activities: prev.activities.map((a) => ({
+        ...a,
+        activityType: idSet.has(a.activityType) ? a.activityType : fallback,
+      })),
+    }))
+    showToast('営業種類を保存しました')
+  }, [activityDraft, setState, showToast])
+
+  const addActivityTypeRow = useCallback(() => {
+    setActivityDraft((d) => [
+      ...d,
+      { id: '', label: '新しい営業種類', role: 'general' },
+    ])
+  }, [])
+
+  const removeActivityTypeRowAt = useCallback(
+    (idx: number) => {
+      const row = activityDraft[idx]
+      if (!row) return
+      if (isBuiltinActivityId(row.id)) {
+        showToast(
+          '既定の営業種類は削除できません（表示名の変更や行の追加は可能です）',
+        )
+        return
+      }
+      setActivityDraft((d) => d.filter((_, i) => i !== idx))
+    },
+    [activityDraft, showToast],
+  )
 
   const addLeadRow = useCallback(() => {
     setLeadDraft((d) => [
@@ -343,52 +430,112 @@ export function SettingsTab({
           </button>
         </div>
 
-        <h3 className="settings-subheading">営業種類の表示名</h3>
+        <h3 className="settings-subheading">営業種類</h3>
+        <p className="hint small">
+          既定の4種は削除できません（分析用の役割も固定です）。行を追加すると<strong>種類そのもの</strong>が増え、フォーム・グラフ・CSVに反映されます。内部キーは英数字推奨（保存時に正規化されます）。カタログに無いキーの活動は、保存時にテレアポ（または先頭の種類）へ置き換わります。
+        </p>
         <table className="targets-table settings-catalog-table">
           <thead>
             <tr>
               <th>内部キー</th>
               <th>表示名</th>
+              <th>分析上の役割</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {ACTIVITY_TYPES_ORDER.map((t) => (
-              <tr key={t}>
-                <td className="settings-mono-cell">{t}</td>
+            {activityDraft.map((row, idx) => (
+              <tr key={`${row.id || 'new'}-${idx}`}>
+                <td>
+                  <input
+                    type="text"
+                    className="cell-input table-cell-mono"
+                    value={row.id}
+                    disabled={isBuiltinActivityId(row.id)}
+                    placeholder="保存時に自動生成（空欄時）"
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setActivityDraft((prev) =>
+                        prev.map((r, i) => (i === idx ? { ...r, id: v } : r)),
+                      )
+                    }}
+                  />
+                </td>
                 <td>
                   <input
                     type="text"
                     className="cell-input table-cell-wide"
-                    placeholder={ACTIVITY_TYPE_LABEL[t]}
-                    value={typeLabelsDraft[t] ?? ''}
-                    onChange={(e) =>
-                      setTypeLabelsDraft((prev) => ({
-                        ...prev,
-                        [t]: e.target.value,
-                      }))
+                    placeholder={
+                      isBuiltinActivityId(row.id)
+                        ? (ACTIVITY_TYPE_LABEL as Record<string, string>)[row.id]
+                        : '表示名'
                     }
+                    value={row.label}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setActivityDraft((prev) =>
+                        prev.map((r, i) => (i === idx ? { ...r, label: v } : r)),
+                      )
+                    }}
                   />
-                  <span className="hint small">
-                    既定: {ACTIVITY_TYPE_LABEL[t]}
-                    {activityTypeDisplayLabel(typeLabelsDraft, t) !== ACTIVITY_TYPE_LABEL[t]
-                      ? ` → 現在の表示: ${activityTypeDisplayLabel(typeLabelsDraft, t)}`
-                      : null}
-                  </span>
+                </td>
+                <td>
+                  {isBuiltinActivityId(row.id) ? (
+                    <span className="hint small" style={{ whiteSpace: 'normal' }}>
+                      {ROLE_OPTION_LABEL[row.role]}（既定）
+                    </span>
+                  ) : (
+                    <select
+                      className="cell-input"
+                      value={row.role}
+                      onChange={(e) => {
+                        const v = e.target.value as ActivityAnalysisRole
+                        setActivityDraft((prev) =>
+                          prev.map((r, i) =>
+                            i === idx ? { ...r, role: v } : r,
+                          ),
+                        )
+                      }}
+                    >
+                      {(Object.keys(ROLE_OPTION_LABEL) as ActivityAnalysisRole[]).map(
+                        (k) => (
+                          <option key={k} value={k}>
+                            {ROLE_OPTION_LABEL[k]}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  )}
+                </td>
+                <td>
+                  <button
+                    type="button"
+                    className="btn ghost danger"
+                    disabled={isBuiltinActivityId(row.id)}
+                    onClick={() => removeActivityTypeRowAt(idx)}
+                  >
+                    削除
+                  </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
         <div className="settings-catalog-actions">
+          <button type="button" className="btn ghost" onClick={addActivityTypeRow}>
+            行を追加
+          </button>
           <button
             type="button"
             className="btn ghost"
-            onClick={() => setTypeLabelsDraft({})}
+            onClick={() =>
+              setActivityDraft(activityTypeCatalog.map((x) => ({ ...x })))
+            }
           >
-            表示名をすべて既定に戻す（保存は別）
+            変更を取り消し
           </button>
-          <button type="button" className="btn primary" onClick={saveActivityTypeLabels}>
-            営業種類の表示名を保存
+          <button type="button" className="btn primary" onClick={saveActivityCatalog}>
+            営業種類を保存
           </button>
         </div>
       </section>

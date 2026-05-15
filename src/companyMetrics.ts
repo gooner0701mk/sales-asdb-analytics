@@ -1,8 +1,18 @@
-import type { ActivityLog, ActivityType, UserMilestones } from './types'
+import type { ActivityLog, ActivityTypeCatalogItem, UserMilestones } from './types'
+import { defaultActivityTypeCatalog } from './types'
 
-/** 飛び込み・テレアポをアプローチ種別とみなす */
-export function isApproachActivityType(t: ActivityType): boolean {
-  return t === 'coldVisit' || t === 'teleAppo'
+function approachActivityIdSet(
+  catalog: ActivityTypeCatalogItem[] = defaultActivityTypeCatalog(),
+): Set<string> {
+  return new Set(catalog.filter((c) => c.role === 'approach').map((c) => c.id))
+}
+
+/** カタログ上 role が approach の営業種類か */
+export function isApproachActivityType(
+  t: string,
+  catalog: ActivityTypeCatalogItem[] = defaultActivityTypeCatalog(),
+): boolean {
+  return approachActivityIdSet(catalog).has(t)
 }
 
 const ZERO_WIDTH = /[\u200b-\u200d\ufeff]/g
@@ -113,8 +123,10 @@ export function inferLastOrderDateFromActivities(
 /** ログ上の飛び込み・テレアポの最終日 */
 export function inferLastApproachDateFromActivities(
   activities: ActivityLog[],
+  catalog: ActivityTypeCatalogItem[] = defaultActivityTypeCatalog(),
 ): string | null {
-  const rows = activities.filter((a) => isApproachActivityType(a.activityType))
+  const ids = approachActivityIdSet(catalog)
+  const rows = activities.filter((a) => ids.has(a.activityType))
   if (rows.length === 0) return null
   return rows.reduce((max, a) => (a.date > max ? a.date : max), rows[0]!.date)
 }
@@ -131,9 +143,11 @@ export function effectiveCompanyLastOrderDate(
 export function effectiveCompanyLastApproachDate(
   company: UserMilestones,
   activities: ActivityLog[],
+  catalog: ActivityTypeCatalogItem[] = defaultActivityTypeCatalog(),
 ): string | null {
   return (
-    company.lastApproachDate ?? inferLastApproachDateFromActivities(activities)
+    company.lastApproachDate ??
+    inferLastApproachDateFromActivities(activities, catalog)
   )
 }
 
@@ -141,11 +155,11 @@ export function effectiveCompanyLastApproachDate(
 export function firstApproachAfter(
   activities: ActivityLog[],
   refOrderDate: string,
+  catalog: ActivityTypeCatalogItem[] = defaultActivityTypeCatalog(),
 ): string | null {
+  const ids = approachActivityIdSet(catalog)
   const next = [...activities]
-    .filter(
-      (a) => isApproachActivityType(a.activityType) && a.date > refOrderDate,
-    )
+    .filter((a) => ids.has(a.activityType) && a.date > refOrderDate)
     .sort((a, b) => a.date.localeCompare(b.date))
   return next[0]?.date ?? null
 }

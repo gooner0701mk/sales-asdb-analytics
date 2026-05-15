@@ -1,15 +1,9 @@
-import type { ActivityLog, ActivityType } from './types'
+import type { ActivityLog } from './types'
 import { parseLeadSourceIdForImport } from './types'
 import { createId } from './createId'
 
 const ACT_HEADER =
   'date,customerName,leadSource,activityType,quoteCount,orderCount,userId'
-
-const ACT_TYPES: ActivityType[] = ['coldVisit', 'teleAppo', 'meeting', 'reception']
-
-function isActivityType(s: string): s is ActivityType {
-  return ACT_TYPES.includes(s as ActivityType)
-}
 
 export function activitiesToCSV(rows: ActivityLog[]): string {
   const sorted = [...rows].sort((a, b) => {
@@ -44,6 +38,7 @@ export function parseActivityCSV(
   text: string,
   defaultUserId: string,
   allowedLeadSourceIds: Set<string>,
+  allowedActivityTypeIds: Set<string>,
 ): ActivityLog[] {
   const lines = text
     .split(/\r?\n/)
@@ -72,7 +67,7 @@ export function parseActivityCSV(
     const date = (cols[iDate] ?? '').trim()
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue
     const activityTypeRaw = (cols[iType] ?? '').trim()
-    if (!isActivityType(activityTypeRaw)) continue
+    if (!allowedActivityTypeIds.has(activityTypeRaw)) continue
     const uid =
       iUser >= 0 && (cols[iUser] ?? '').trim()
         ? (cols[iUser] ?? '').trim()

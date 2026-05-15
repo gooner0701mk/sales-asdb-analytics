@@ -1,4 +1,4 @@
-import type { MonthlyRecord } from './types'
+import type { ActivityTypeCatalogItem, MonthlyRecord } from './types'
 
 export function pct(n: number, d: number): number {
   if (d <= 0) return 0
@@ -12,53 +12,65 @@ export function formatYmJa(ym: string): string {
 }
 
 export type Totals = {
-  coldVisits: number
-  teleAppo: number
-  meetings: number
-  receptions: number
+  activityCounts: Record<string, number>
   quotes: number
   closedWon: number
 }
 
 export function sumTotals(rows: MonthlyRecord[]): Totals {
-  return rows.reduce(
-    (acc, r) => ({
-      coldVisits: acc.coldVisits + r.coldVisits,
-      teleAppo: acc.teleAppo + r.teleAppo,
-      meetings: acc.meetings + r.meetings,
-      receptions: acc.receptions + r.receptions,
-      quotes: acc.quotes + r.quotes,
-      closedWon: acc.closedWon + r.closedWon,
-    }),
-    {
-      coldVisits: 0,
-      teleAppo: 0,
-      meetings: 0,
-      receptions: 0,
-      quotes: 0,
-      closedWon: 0,
-    },
-  )
+  const activityCounts: Record<string, number> = {}
+  let quotes = 0
+  let closedWon = 0
+  for (const r of rows) {
+    quotes += r.quotes
+    closedWon += r.closedWon
+    for (const [k, v] of Object.entries(r.activityCounts)) {
+      activityCounts[k] = (activityCounts[k] ?? 0) + v
+    }
+  }
+  return { activityCounts, quotes, closedWon }
 }
 
-type SalesActivityCounts = Pick<
-  Totals,
-  'coldVisits' | 'teleAppo' | 'meetings' | 'receptions'
->
-
-/** 営業件数（飛び込み＋テレアポ＋商談＋接待の回数合計） */
-export function totalSalesActivities(t: SalesActivityCounts): number {
-  return t.coldVisits + t.teleAppo + t.meetings + t.receptions
+function countByRole(
+  t: Totals,
+  catalog: ActivityTypeCatalogItem[],
+  role: ActivityTypeCatalogItem['role'],
+): number {
+  return catalog
+    .filter((c) => c.role === role)
+    .reduce((s, c) => s + (t.activityCounts[c.id] ?? 0), 0)
 }
 
-/** アプローチ件数（飛び込み＋テレアポ） */
-export function totalApproaches(t: Totals): number {
-  return t.coldVisits + t.teleAppo
+/** 営業件数（カタログに列挙された種類の合計） */
+export function totalSalesActivities(
+  t: Totals,
+  catalog: ActivityTypeCatalogItem[],
+): number {
+  return catalog.reduce((s, c) => s + (t.activityCounts[c.id] ?? 0), 0)
 }
 
-/** 営業件数に対する見積もり件数率（％）。見積が活動を上回ると100超になり得る */
-export function quotesPerSalesActivityRate(t: Totals): number {
-  return pct(t.quotes, totalSalesActivities(t))
+/** アプローチ件数（role が approach の種類の合計） */
+export function totalApproaches(
+  t: Totals,
+  catalog: ActivityTypeCatalogItem[],
+): number {
+  return countByRole(t, catalog, 'approach')
+}
+
+/** 商談相当の件数（role が meeting） */
+export function meetingActivityCount(
+  t: Totals,
+  catalog: ActivityTypeCatalogItem[],
+): number {
+  return countByRole(t, catalog, 'meeting')
+}
+
+/** 営業件数に対する見積もり件数率（％）。見積が活動を上回ると100超え得る */
+export function quotesPerSalesActivityRate(
+  t: Totals,
+  catalog: ActivityTypeCatalogItem[],
+): number {
+  return pct(t.quotes, totalSalesActivities(t, catalog))
 }
 
 /** 見積もり件数に対する受注率（％） */
@@ -72,17 +84,41 @@ function chartRowLabel(r: MonthlyRecord & { chartLabel?: string }): string {
   return formatYmJa(r.ym)
 }
 
-export function chartRows(rows: (MonthlyRecord & { chartLabel?: string })[]) {
+function sumRoleRow(
+  r: MonthlyRecord,
+  catalog: ActivityTypeCatalogItem[],
+  role: ActivityTypeCatalogItem['role'],
+): number {
+  return catalog
+    .filter((c) => c.role === role)
+    .reduce((s, c) => s + (r.activityCounts[c.id] ?? 0), 0)
+}
+
+function totalSalesRow(r: MonthlyRecord, catalog: ActivityTypeCatalogItem[]): number {
+  return catalog.reduce((s, c) => s + (r.activityCounts[c.id] ?? 0), 0)
+}
+
+export function chartRows(
+  rows: (MonthlyRecord & { chartLabel?: string })[],
+  catalog: ActivityTypeCatalogItem[],
+) {
+  const ids = catalog.map((c) => c.id)
   const sorted = [...rows].sort((a, b) => a.ym.localeCompare(b.ym))
   return sorted.map((r) => {
-    const ap = r.coldVisits + r.teleAppo
-    const sales = totalSalesActivities(r)
+    const flat = Object.fromEntries(
+      ids.map((id) => [id, r.activityCounts[id] ?? 0]),
+    ) as Record<string, number>
+    const ap = sumRoleRow(r, catalog, 'approach')
+    const meet = sumRoleRow(r, catalog, 'meeting')
+    const sales = totalSalesRow(r, catalog)
     return {
-      ...r,
+      ...flat,
+      quotes: r.quotes,
+      closedWon: r.closedWon,
       label: chartRowLabel(r),
       approaches: ap,
-      approachToMeeting: pct(r.meetings, ap),
-      meetingToQuote: pct(r.quotes, r.meetings),
+      approachToMeeting: pct(meet, ap),
+      meetingToQuote: pct(r.quotes, meet),
       quoteToWin: pct(r.closedWon, r.quotes),
       approachToWin: pct(r.closedWon, ap),
       quotesPerSalesRate: pct(r.quotes, sales),
@@ -91,15 +127,27 @@ export function chartRows(rows: (MonthlyRecord & { chartLabel?: string })[]) {
   })
 }
 
-export function periodFunnel(totals: Totals) {
-  const ap = totalApproaches(totals)
-  const sales = totalSalesActivities(totals)
+export function periodFunnel(
+  totals: Totals,
+  catalog: ActivityTypeCatalogItem[],
+) {
+  const ap = totalApproaches(totals, catalog)
+  const meet = meetingActivityCount(totals, catalog)
+  const sales = totalSalesActivities(totals, catalog)
   return {
-    approachToMeeting: pct(totals.meetings, ap),
-    meetingToQuote: pct(totals.quotes, totals.meetings),
+    approachToMeeting: pct(meet, ap),
+    meetingToQuote: pct(totals.quotes, meet),
     quoteToWin: pct(totals.closedWon, totals.quotes),
     approachToWin: pct(totals.closedWon, ap),
     quotesPerSalesRate: pct(totals.quotes, sales),
     orderPerQuoteRate: pct(totals.closedWon, totals.quotes),
   }
+}
+
+/** アプローチ件数（飛び込み＋テレアポ相当）— 月次行用 */
+export function totalApproachesRow(
+  r: MonthlyRecord,
+  catalog: ActivityTypeCatalogItem[],
+): number {
+  return sumRoleRow(r, catalog, 'approach')
 }

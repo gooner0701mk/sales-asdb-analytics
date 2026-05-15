@@ -2,10 +2,192 @@ import type { ChartColorPalette } from './chartColors'
 import { DEFAULT_CHART_COLORS } from './chartColors'
 import { createId } from './createId'
 
-/** 1回の営業活動ログ */
-export type ActivityType = 'coldVisit' | 'teleAppo' | 'meeting' | 'reception'
+/** 既定の営業種類 id（互換・CSV） */
+export type BuiltinActivityTypeId =
+  | 'coldVisit'
+  | 'teleAppo'
+  | 'meeting'
+  | 'reception'
 
-/** 既定の流入経路キー（互換・CSV 用） */
+/** 活動ログの activityType はカタログの id（文字列） */
+export type ActivityType = string
+
+export const BUILTIN_ACTIVITY_IDS: readonly BuiltinActivityTypeId[] = [
+  'coldVisit',
+  'teleAppo',
+  'meeting',
+  'reception',
+] as const
+
+/** 転換率・「アプローチ件数」集計での扱い */
+export type ActivityAnalysisRole = 'approach' | 'meeting' | 'reception' | 'general'
+
+export type ActivityTypeCatalogItem = {
+  id: string
+  label: string
+  role: ActivityAnalysisRole
+}
+
+const DEFAULT_ACTIVITY_ROLE: Record<BuiltinActivityTypeId, ActivityAnalysisRole> = {
+  coldVisit: 'approach',
+  teleAppo: 'approach',
+  meeting: 'meeting',
+  reception: 'reception',
+}
+
+export const ACTIVITY_TYPE_LABEL: Record<BuiltinActivityTypeId, string> = {
+  coldVisit: '飛び込み',
+  teleAppo: 'テレアポ',
+  meeting: '商談',
+  reception: '接待',
+}
+
+export const ACTIVITY_TYPES_ORDER: readonly BuiltinActivityTypeId[] = [
+  'coldVisit',
+  'teleAppo',
+  'meeting',
+  'reception',
+] as const
+
+export function defaultActivityTypeCatalog(): ActivityTypeCatalogItem[] {
+  return BUILTIN_ACTIVITY_IDS.map((id) => ({
+    id,
+    label: ACTIVITY_TYPE_LABEL[id],
+    role: DEFAULT_ACTIVITY_ROLE[id],
+  }))
+}
+
+function parseActivityAnalysisRole(raw: unknown): ActivityAnalysisRole {
+  if (raw === 'approach' || raw === 'meeting' || raw === 'reception' || raw === 'general')
+    return raw
+  return 'general'
+}
+
+/**
+ * 営業種類カタログを正規化。
+ * 旧 `activityTypeLabels` は表示名のマージにのみ使う。
+ */
+export function normalizeActivityTypeCatalog(
+  rawCatalog: unknown,
+  legacyLabels: unknown,
+): ActivityTypeCatalogItem[] {
+  const labelOverrides: Record<string, unknown> =
+    legacyLabels && typeof legacyLabels === 'object' && !Array.isArray(legacyLabels)
+      ? (legacyLabels as Record<string, unknown>)
+      : {}
+  const mergeLabel = (id: string, def: string) => {
+    const o = labelOverrides[id]
+    return typeof o === 'string' && o.trim() ? o.trim() : def
+  }
+
+  if (!Array.isArray(rawCatalog) || rawCatalog.length === 0) {
+    return defaultActivityTypeCatalog().map((row) => ({
+      ...row,
+      label: mergeLabel(row.id, row.label),
+    }))
+  }
+
+  const parsed: ActivityTypeCatalogItem[] = []
+  const seen = new Set<string>()
+  for (const x of rawCatalog) {
+    if (!x || typeof x !== 'object') continue
+    const r = x as Record<string, unknown>
+    const id = typeof r.id === 'string' ? r.id.trim() : ''
+    if (!id || seen.has(id)) continue
+    const builtin = (BUILTIN_ACTIVITY_IDS as readonly string[]).includes(id)
+    const defLab = (ACTIVITY_TYPE_LABEL as Record<string, string>)[id] ?? id
+    const label =
+      typeof r.label === 'string' && r.label.trim() ? r.label.trim() : defLab
+    let role = parseActivityAnalysisRole(r.role)
+    if (builtin) {
+      role = DEFAULT_ACTIVITY_ROLE[id as BuiltinActivityTypeId] ?? role
+    }
+    seen.add(id)
+    parsed.push({ id, label: mergeLabel(id, label), role })
+  }
+
+  const byId = new Map(parsed.map((p) => [p.id, p]))
+  const head: ActivityTypeCatalogItem[] = []
+  for (const bid of BUILTIN_ACTIVITY_IDS) {
+    const hit = byId.get(bid)
+    head.push(
+      hit
+        ? {
+            ...hit,
+            label: mergeLabel(bid, hit.label),
+            role: DEFAULT_ACTIVITY_ROLE[bid],
+          }
+        : {
+            id: bid,
+            label: mergeLabel(bid, ACTIVITY_TYPE_LABEL[bid]),
+            role: DEFAULT_ACTIVITY_ROLE[bid],
+          },
+    )
+  }
+  const tail = parsed.filter(
+    (p) => !(BUILTIN_ACTIVITY_IDS as readonly string[]).includes(p.id),
+  )
+  return [...head, ...tail]
+}
+
+export function labelForActivityTypeId(
+  catalog: ActivityTypeCatalogItem[],
+  id: string,
+): string {
+  const row = catalog.find((c) => c.id === id)
+  return row?.label ?? id
+}
+
+/** localStorage / JSON からの1件を ActivityLog に正規化。不正なら null */
+export function normalizeStoredActivity(
+  x: unknown,
+  leadSourceIdSet: Set<string>,
+  activityTypeIdSet: Set<string>,
+  fallbackActivityTypeId: string,
+): ActivityLog | null {
+  if (!x || typeof x !== 'object') return null
+  const r = x as Record<string, unknown>
+  if (
+    typeof r.id !== 'string' ||
+    typeof r.userId !== 'string' ||
+    typeof r.date !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(r.date) ||
+    typeof r.customerName !== 'string' ||
+    typeof r.activityType !== 'string'
+  ) {
+    return null
+  }
+  const q =
+    typeof r.quoteCount === 'number'
+      ? r.quoteCount
+      : Number.parseInt(String(r.quoteCount ?? ''), 10)
+  const o =
+    typeof r.orderCount === 'number'
+      ? r.orderCount
+      : Number.parseInt(String(r.orderCount ?? ''), 10)
+  let leadSource: string | null = null
+  const ls = r.leadSource
+  if (ls !== null && ls !== undefined && typeof ls === 'string') {
+    const t = ls.trim()
+    if (t && leadSourceIdSet.has(t)) leadSource = t
+  }
+  const atRaw = r.activityType.trim()
+  const activityType = activityTypeIdSet.has(atRaw)
+    ? atRaw
+    : activityTypeIdSet.has(fallbackActivityTypeId)
+      ? fallbackActivityTypeId
+      : [...activityTypeIdSet][0] ?? 'meeting'
+  return {
+    id: r.id,
+    userId: r.userId,
+    date: r.date,
+    customerName: r.customerName,
+    leadSource,
+    activityType,
+    quoteCount: Number.isFinite(q) ? Math.max(0, Math.round(q)) : 0,
+    orderCount: Number.isFinite(o) ? Math.max(0, Math.round(o)) : 0,
+  }
+}
 export type BuiltinLeadSourceId =
   | 'fromList'
   | 'fromBidResult'
@@ -101,60 +283,6 @@ export function parseLeadSourceIdForImport(
   return null
 }
 
-const ACTIVITY_TYPES: readonly ActivityType[] = [
-  'coldVisit',
-  'teleAppo',
-  'meeting',
-  'reception',
-] as const
-
-function isActivityTypeString(s: unknown): s is ActivityType {
-  return typeof s === 'string' && (ACTIVITY_TYPES as readonly string[]).includes(s)
-}
-
-/** localStorage / JSON からの1件を ActivityLog に正規化。不正なら null */
-export function normalizeStoredActivity(
-  x: unknown,
-  leadSourceIdSet: Set<string>,
-): ActivityLog | null {
-  if (!x || typeof x !== 'object') return null
-  const r = x as Record<string, unknown>
-  if (
-    typeof r.id !== 'string' ||
-    typeof r.userId !== 'string' ||
-    typeof r.date !== 'string' ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(r.date) ||
-    typeof r.customerName !== 'string' ||
-    !isActivityTypeString(r.activityType)
-  ) {
-    return null
-  }
-  const q =
-    typeof r.quoteCount === 'number'
-      ? r.quoteCount
-      : Number.parseInt(String(r.quoteCount ?? ''), 10)
-  const o =
-    typeof r.orderCount === 'number'
-      ? r.orderCount
-      : Number.parseInt(String(r.orderCount ?? ''), 10)
-  let leadSource: string | null = null
-  const ls = r.leadSource
-  if (ls !== null && ls !== undefined && typeof ls === 'string') {
-    const t = ls.trim()
-    if (t && leadSourceIdSet.has(t)) leadSource = t
-  }
-  return {
-    id: r.id,
-    userId: r.userId,
-    date: r.date,
-    customerName: r.customerName,
-    leadSource,
-    activityType: r.activityType,
-    quoteCount: Number.isFinite(q) ? Math.max(0, Math.round(q)) : 0,
-    orderCount: Number.isFinite(o) ? Math.max(0, Math.round(o)) : 0,
-  }
-}
-
 export type User = {
   id: string
   name: string
@@ -185,11 +313,8 @@ export type ActivityLog = {
 export type MonthlyRecord = {
   id: string
   ym: string
-  coldVisits: number
-  teleAppo: number
-  meetings: number
-  /** 接待件数 */
-  receptions: number
+  /** 営業種類 id ごとの件数 */
+  activityCounts: Record<string, number>
   quotes: number
   closedWon: number
 }
@@ -360,11 +485,8 @@ export type AppState = {
   users: User[]
   /** 活動ログの流入経路の選択肢（順序はフォーム・集計に反映） */
   leadSourceCatalog: SelectOptionItem[]
-  /**
-   * 営業種類4種の表示名オーバーライド（キーが無いときは ACTIVITY_TYPE_LABEL）。
-   * 集計キー（coldVisit 等）は変更しません。
-   */
-  activityTypeLabels: Partial<Record<ActivityType, string>>
+  /** 営業種類（id・表示名・分析ロール）。追加行は任意 id。 */
+  activityTypeCatalog: ActivityTypeCatalogItem[]
   /** 会社名・会計年度・期番号の表示設定 */
   companySettings: CompanySettings
   /** 活動の登録者・「自分」の集計に使うユーザー */
@@ -390,29 +512,6 @@ export type AppState = {
   estimateTasks: EstimateTask[]
 }
 
-export const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = {
-  coldVisit: '飛び込み',
-  teleAppo: 'テレアポ',
-  meeting: '商談',
-  reception: '接待',
-}
-
-export const ACTIVITY_TYPES_ORDER: readonly ActivityType[] = [
-  'coldVisit',
-  'teleAppo',
-  'meeting',
-  'reception',
-] as const
-
-export function activityTypeDisplayLabel(
-  overrides: Partial<Record<ActivityType, string>> | undefined,
-  t: ActivityType,
-): string {
-  const o = overrides?.[t]
-  if (typeof o === 'string' && o.trim()) return o.trim()
-  return ACTIVITY_TYPE_LABEL[t]
-}
-
 export function newUser(name: string): User {
   return { id: createId(), name: name.trim() || '無名' }
 }
@@ -427,7 +526,7 @@ export function emptyState(): AppState {
     version: 8,
     users: [u],
     leadSourceCatalog: defaultLeadSourceCatalog(),
-    activityTypeLabels: {},
+    activityTypeCatalog: defaultActivityTypeCatalog(),
     companySettings: { ...DEFAULT_COMPANY_SETTINGS },
     sessionUserId: u.id,
     dataViewUserIds: [u.id],

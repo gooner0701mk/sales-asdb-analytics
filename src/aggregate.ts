@@ -11,9 +11,17 @@ export function filterActivities(
   return activities.filter((a) => set.has(a.userId))
 }
 
+function emptyActivityCounts(ids: string[]): Record<string, number> {
+  return Object.fromEntries(ids.map((id) => [id, 0]))
+}
+
 /** 活動ログを月ごとに件数集計（グラフ・カード用） */
-export function aggregateByMonth(activities: ActivityLog[]): MonthlyRecord[] {
+export function aggregateByMonth(
+  activities: ActivityLog[],
+  activityTypeIds: string[],
+): MonthlyRecord[] {
   const map = new Map<string, MonthlyRecord>()
+  const idSet = new Set(activityTypeIds)
 
   for (const a of activities) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(a.date)) continue
@@ -25,20 +33,17 @@ export function aggregateByMonth(activities: ActivityLog[]): MonthlyRecord[] {
       row = {
         id: `agg-${ym}`,
         ym,
-        coldVisits: 0,
-        teleAppo: 0,
-        meetings: 0,
-        receptions: 0,
+        activityCounts: emptyActivityCounts(activityTypeIds),
         quotes: 0,
         closedWon: 0,
       }
       map.set(ym, row)
     }
 
-    if (a.activityType === 'coldVisit') row.coldVisits += 1
-    else if (a.activityType === 'teleAppo') row.teleAppo += 1
-    else if (a.activityType === 'meeting') row.meetings += 1
-    else if (a.activityType === 'reception') row.receptions += 1
+    if (idSet.has(a.activityType)) {
+      row.activityCounts[a.activityType] =
+        (row.activityCounts[a.activityType] ?? 0) + 1
+    }
 
     row.quotes += a.quoteCount
     row.closedWon += a.orderCount

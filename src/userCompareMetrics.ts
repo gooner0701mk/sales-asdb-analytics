@@ -7,7 +7,7 @@ import {
   sumTotals,
   totalSalesActivities,
 } from './metrics'
-import type { ActivityLog, SelectOptionItem, User } from './types'
+import type { ActivityLog, ActivityTypeCatalogItem, SelectOptionItem, User } from './types'
 
 export type UserPeriodTotals = {
   userId: string
@@ -17,10 +17,38 @@ export type UserPeriodTotals = {
   activityCount: number
 }
 
+export type UserCompareTabDef = {
+  id: string
+  label: string
+  kind: 'count' | 'percent' | 'leadStack'
+}
+
+const TAIL_TABS: readonly UserCompareTabDef[] = [
+  { id: 'salesActs', label: '営業件数（計）', kind: 'count' },
+  { id: 'quotes', label: '見積もり（件数合計）', kind: 'count' },
+  { id: 'closedWon', label: '受注（件数合計）', kind: 'count' },
+  { id: 'activityLog', label: '活動ログ件数', kind: 'count' },
+  { id: 'quotesRate', label: '見積÷営業件数（％）', kind: 'percent' },
+  { id: 'orderRate', label: '受注÷見積（％）', kind: 'percent' },
+  { id: 'leadSources', label: '流入経路（内訳・件数）', kind: 'leadStack' },
+] as const
+
+export function buildUserCompareTabs(
+  activityCatalog: ActivityTypeCatalogItem[],
+): readonly UserCompareTabDef[] {
+  const head = activityCatalog.map((c) => ({
+    id: c.id,
+    label: `${c.label}件数`,
+    kind: 'count' as const,
+  }))
+  return [...head, ...TAIL_TABS]
+}
+
 /** 画面上部の「表示単位」と同じ期間で、ユーザーごとに活動を集計 */
 export function buildUserPeriodTotals(
   users: User[],
   allActivities: ActivityLog[],
+  activityTypeIds: string[],
   periodGroup: PeriodGroupMode,
   focusMonthYm: string,
   todayYmd: string,
@@ -37,7 +65,7 @@ export function buildUserPeriodTotals(
       fiscalYearStartMonth,
       fiscalFocusStartYear,
     )
-    const months = aggregateByMonth(scoped)
+    const months = aggregateByMonth(scoped, activityTypeIds)
     return {
       userId: u.id,
       displayName: u.name,
@@ -47,37 +75,17 @@ export function buildUserPeriodTotals(
   })
 }
 
-export const USER_COMPARE_TABS = [
-  { id: 'coldVisit', label: '飛び込み件数', kind: 'count' as const },
-  { id: 'teleAppo', label: 'テレアポ件数', kind: 'count' as const },
-  { id: 'meeting', label: '商談件数', kind: 'count' as const },
-  { id: 'reception', label: '接待件数', kind: 'count' as const },
-  { id: 'salesActs', label: '営業件数（計）', kind: 'count' as const },
-  { id: 'quotes', label: '見積もり（件数合計）', kind: 'count' as const },
-  { id: 'closedWon', label: '受注（件数合計）', kind: 'count' as const },
-  { id: 'activityLog', label: '活動ログ件数', kind: 'count' as const },
-  { id: 'quotesRate', label: '見積÷営業件数（％）', kind: 'percent' as const },
-  { id: 'orderRate', label: '受注÷見積（％）', kind: 'percent' as const },
-  { id: 'leadSources', label: '流入経路（内訳・件数）', kind: 'leadStack' as const },
-] as const
-
-export type UserCompareTabId = (typeof USER_COMPARE_TABS)[number]['id']
-
 export function tabValueForUser(
   row: UserPeriodTotals,
-  tabId: Exclude<UserCompareTabId, 'leadSources'>,
+  tabId: string,
+  activityCatalog: ActivityTypeCatalogItem[],
 ): number {
+  if (activityCatalog.some((c) => c.id === tabId)) {
+    return row.totals.activityCounts[tabId] ?? 0
+  }
   switch (tabId) {
-    case 'coldVisit':
-      return row.totals.coldVisits
-    case 'teleAppo':
-      return row.totals.teleAppo
-    case 'meeting':
-      return row.totals.meetings
-    case 'reception':
-      return row.totals.receptions
     case 'salesActs':
-      return totalSalesActivities(row.totals)
+      return totalSalesActivities(row.totals, activityCatalog)
     case 'quotes':
       return row.totals.quotes
     case 'closedWon':
@@ -85,9 +93,11 @@ export function tabValueForUser(
     case 'activityLog':
       return row.activityCount
     case 'quotesRate':
-      return quotesPerSalesActivityRate(row.totals)
+      return quotesPerSalesActivityRate(row.totals, activityCatalog)
     case 'orderRate':
       return ordersPerQuoteRate(row.totals)
+    default:
+      return 0
   }
 }
 
@@ -137,4 +147,12 @@ export function buildLeadSourceStackRows(
     }
     return { name: u.name, userId: u.id, ...counts }
   })
+}
+
+export function isLeadSourcesCompareTab(tabId: string): boolean {
+  return tabId === 'leadSources'
+}
+
+export function isPercentCompareTab(tabId: string): boolean {
+  return tabId === 'quotesRate' || tabId === 'orderRate'
 }

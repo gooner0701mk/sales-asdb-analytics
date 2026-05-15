@@ -14,6 +14,22 @@ export function fyMarchStartYearFromCalendarYm(ym: string): number {
   return fyStartYearFromCalendarYm(ym, 3)
 }
 
+function mergeActivityCounts(
+  a: Record<string, number>,
+  b: Record<string, number>,
+  ids: string[],
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const id of ids) {
+    out[id] = (a[id] ?? 0) + (b[id] ?? 0)
+  }
+  return out
+}
+
+function emptyActivityCounts(ids: string[]): Record<string, number> {
+  return Object.fromEntries(ids.map((id) => [id, 0]))
+}
+
 /**
  * 月次集計行を、表示単位に応じてまとめ直す。
  * - month: そのまま
@@ -24,9 +40,12 @@ export function rollupPeriodBuckets(
   months: MonthlyRecord[],
   mode: PeriodGroupMode,
   fiscalYearStartMonth: number,
+  activityTypeIds: string[],
 ): BucketMonthlyRecord[] {
   const sorted = [...months].sort((a, b) => a.ym.localeCompare(b.ym))
   if (sorted.length === 0) return []
+
+  const zero = () => emptyActivityCounts(activityTypeIds)
 
   if (mode === 'month') {
     return sorted.map((r) => ({ ...r }))
@@ -35,18 +54,12 @@ export function rollupPeriodBuckets(
   if (mode === 'all') {
     const t = sorted.reduce(
       (acc, r) => ({
-        coldVisits: acc.coldVisits + r.coldVisits,
-        teleAppo: acc.teleAppo + r.teleAppo,
-        meetings: acc.meetings + r.meetings,
-        receptions: acc.receptions + r.receptions,
+        activityCounts: mergeActivityCounts(acc.activityCounts, r.activityCounts, activityTypeIds),
         quotes: acc.quotes + r.quotes,
         closedWon: acc.closedWon + r.closedWon,
       }),
       {
-        coldVisits: 0,
-        teleAppo: 0,
-        meetings: 0,
-        receptions: 0,
+        activityCounts: zero(),
         quotes: 0,
         closedWon: 0,
       },
@@ -62,33 +75,31 @@ export function rollupPeriodBuckets(
   }
 
   const sm = fiscalYearStartMonth
-  const map = new Map<number, BucketMonthlyRecord>()
+  const fyMap = new Map<number, BucketMonthlyRecord>()
   for (const r of sorted) {
     const fy = fyStartYearFromCalendarYm(r.ym, sm)
-    let row = map.get(fy)
+    let row = fyMap.get(fy)
     if (!row) {
       row = {
         id: `fy-${fy}`,
         ym: `${fy}-${String(Math.max(1, Math.min(12, sm))).padStart(2, '0')}`,
         chartLabel: fiscalYearRangeLabel(fy, sm),
-        coldVisits: 0,
-        teleAppo: 0,
-        meetings: 0,
-        receptions: 0,
+        activityCounts: zero(),
         quotes: 0,
         closedWon: 0,
       }
-      map.set(fy, row)
+      fyMap.set(fy, row)
     }
-    row.coldVisits += r.coldVisits
-    row.teleAppo += r.teleAppo
-    row.meetings += r.meetings
-    row.receptions += r.receptions
+    row.activityCounts = mergeActivityCounts(
+      row.activityCounts,
+      r.activityCounts,
+      activityTypeIds,
+    )
     row.quotes += r.quotes
     row.closedWon += r.closedWon
   }
 
-  return [...map.entries()]
+  return [...fyMap.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([, v]) => v)
 }

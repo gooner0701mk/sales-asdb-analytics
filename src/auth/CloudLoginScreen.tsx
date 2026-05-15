@@ -123,7 +123,9 @@ export function CloudLoginScreen() {
       >
         <h1 className="cloud-login-title">営業データ分析</h1>
         <p className="cloud-login-lead">
-          クラウド保存モードです。ログインした<strong>社員全員で同じデータ</strong>を共有します（Supabase の共有ストアに保存されます）。
+          クラウド保存モードです。ログインした<strong>社員全員で同じデータ</strong>を共有します（Supabase の共有ストアに保存されます）。デプロイごとに{' '}
+          <code>VITE_COMPANY_ID</code> を分けると、他社の共有データとはデータベース上も切り離されます（未設定は{' '}
+          <code>default</code>）。
         </p>
         <p className="hint small cloud-login-rate-hint">
           登録や確認メールの再送を短時間に繰り返すと、セキュリティのため一時的にブロックされることがあります（
@@ -310,6 +312,8 @@ export function CloudLoginScreen() {
               <strong>Authentication → Emails</strong> でカスタム SMTP の利用も検討してください。
               Vercel の環境変数に <code>VITE_AUTH_EMAIL_REDIRECT_URL</code> を本番のサイトURL（末尾{' '}
               <code>/</code> 付き可）で入れると、確認メールのリンク先が常にそのURLになります。
+              会社単位の共有に <code>VITE_COMPANY_ID</code> を使う場合は、既存ユーザーの{' '}
+              <code>profiles.company_id</code> を Supabase の SQL で揃える必要があることがあります（マイグレーション末尾のコメント参照）。
             </p>
             <button
               type="button"

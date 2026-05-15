@@ -1,12 +1,11 @@
 import { getSupabase } from '../supabaseClient'
+import { cloudCompanyId } from './companyId'
 import { stateToJson } from '../stateJson'
 import type { AppState } from '../types'
 import { normalizeStoredStateRecord } from '../storage'
 
-const SHARED_ROW_ID = 'default' as const
-
 /**
- * Supabase の shared_app_state（会社共有・1行）の payload を AppState にする。
+ * Supabase の shared_app_state（会社共有・company_id ごと1行）の payload を AppState にする。
  */
 export async function fetchSharedAppState(): Promise<AppState | null> {
   const sb = getSupabase()
@@ -15,7 +14,7 @@ export async function fetchSharedAppState(): Promise<AppState | null> {
   const { data, error } = await sb
     .from('shared_app_state')
     .select('payload')
-    .eq('id', SHARED_ROW_ID)
+    .eq('company_id', cloudCompanyId())
     .maybeSingle()
 
   if (error) throw error
@@ -44,11 +43,11 @@ export async function upsertSharedAppState(state: AppState): Promise<void> {
   const payload = JSON.parse(stateToJson(state)) as Record<string, unknown>
   const { error } = await sb.from('shared_app_state').upsert(
     {
-      id: SHARED_ROW_ID,
+      company_id: cloudCompanyId(),
       payload,
       updated_at: new Date().toISOString(),
     },
-    { onConflict: 'id' },
+    { onConflict: 'company_id' },
   )
 
   if (error) throw error

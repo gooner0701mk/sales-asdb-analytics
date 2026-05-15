@@ -11,6 +11,7 @@ import type { Session, User } from '@supabase/supabase-js'
 import { friendlyResendError, friendlySignInError, friendlySignUpError } from './authErrorMessages'
 import { withAuthTimeout } from './authTimeout'
 import { clearSupabaseBrowserSession, getSupabase, isSupabaseConfigured } from '../supabaseClient'
+import { cloudCompanyId } from '../cloud/companyId'
 
 /**
  * 確認メールの `emailRedirectTo` 用。
@@ -126,7 +127,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data, error } = await sb.auth.signUp({
           email,
           password,
-          options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+          options: {
+            ...(redirectTo ? { emailRedirectTo: redirectTo } : {}),
+            data: { company_id: cloudCompanyId() },
+          },
         })
         if (error) {
           return {

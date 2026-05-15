@@ -17,8 +17,18 @@ export function normalizeSupabaseProjectUrl(raw: string): string {
   return u
 }
 
+/** anon キーを誤って2回貼ったときの救済（Bearer に JWT が2つ並ぶのを防ぐ） */
+function firstJwtLikeAnonKey(raw: string | undefined): string | undefined {
+  const t = trimEnvValue(raw)
+  if (!t) return undefined
+  const jwtRe = /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g
+  const found = t.match(jwtRe)
+  if (found && found.length >= 1) return found[0]
+  return t
+}
+
 const urlRaw = trimEnvValue(import.meta.env.VITE_SUPABASE_URL as string | undefined)
-const anonRaw = trimEnvValue(import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)
+const anonRaw = firstJwtLikeAnonKey(import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)
 const url = urlRaw ? normalizeSupabaseProjectUrl(urlRaw) : undefined
 const anon = anonRaw
 

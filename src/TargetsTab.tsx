@@ -11,8 +11,15 @@ import { daysElapsedSince, formatDateJa, formatElapsedLabel, todayIsoDate } from
 import { DataViewUserSelectBar } from './DataViewUserSelectBar'
 import { dataViewShowsOwnerColumn } from './dataViewSelection'
 import { useMediaQuery } from './useMediaQuery'
-import type { ActivityLog, ApproachTarget, AppState, DataViewUserIds, User } from './types'
-import { LEAD_SOURCE_LABEL, newApproachTarget } from './types'
+import type {
+  ActivityLog,
+  ApproachTarget,
+  AppState,
+  DataViewUserIds,
+  SelectOptionItem,
+  User,
+} from './types'
+import { labelForLeadSourceId, newApproachTarget } from './types'
 
 type Props = {
   targets: ApproachTarget[]
@@ -22,6 +29,7 @@ type Props = {
   setState: Dispatch<SetStateAction<AppState>>
   showToast: (msg: string) => void
   activities: ActivityLog[]
+  leadSourceCatalog: SelectOptionItem[]
 }
 
 export function TargetsTab({
@@ -32,6 +40,7 @@ export function TargetsTab({
   setState,
   showToast,
   activities,
+  leadSourceCatalog,
 }: Props) {
   const [formName, setFormName] = useState('')
   const [formDate, setFormDate] = useState<string>('')
@@ -208,7 +217,7 @@ export function TargetsTab({
                         <div className="targets-row-card-lead">
                           {lead ? (
                             <span className="targets-lead-label">
-                              {LEAD_SOURCE_LABEL[lead]}
+                              {labelForLeadSourceId(leadSourceCatalog, lead)}
                             </span>
                           ) : (
                             <span className="muted">―</span>
@@ -336,7 +345,7 @@ export function TargetsTab({
                       </td>
                       <td className="targets-lead-cell">
                         {lead ? (
-                          <span className="targets-lead-label">{LEAD_SOURCE_LABEL[lead]}</span>
+                          <span className="targets-lead-label">{labelForLeadSourceId(leadSourceCatalog, lead)}</span>
                         ) : (
                           <span className="muted">―</span>
                         )}

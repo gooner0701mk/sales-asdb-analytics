@@ -1,10 +1,9 @@
-import type { ActivityLog, LeadSource } from './types'
-import { LEAD_SOURCE_LABEL, LEAD_SOURCES } from './types'
+import type { ActivityLog, SelectOptionItem } from './types'
 import { fyStartYearFromCalendarYm } from './fiscalYear'
 import type { PeriodGroupMode } from './periodGroup'
 
 export type LeadSourceAggRow = {
-  key: LeadSource | 'unset'
+  key: string
   label: string
   activityCount: number
   /** 見積もり件数の合計（活動ごとの quoteCount を加算） */
@@ -13,15 +12,16 @@ export type LeadSourceAggRow = {
   activitiesWithQuote: number
 }
 
-/** 期間内の活動を流入経路ごとに集計 */
+/** 期間内の活動を流入経路ごとに集計（カタログの順＋末尾に流入未設定） */
 export function aggregateByLeadSource(
   activities: ActivityLog[],
+  catalog: SelectOptionItem[],
 ): LeadSourceAggRow[] {
-  const map = new Map<LeadSource | 'unset', LeadSourceAggRow>()
-  for (const k of LEAD_SOURCES) {
-    map.set(k, {
-      key: k,
-      label: LEAD_SOURCE_LABEL[k],
+  const map = new Map<string, LeadSourceAggRow>()
+  for (const { id, label } of catalog) {
+    map.set(id, {
+      key: id,
+      label,
       activityCount: 0,
       quoteSum: 0,
       activitiesWithQuote: 0,
@@ -35,16 +35,26 @@ export function aggregateByLeadSource(
     activitiesWithQuote: 0,
   })
 
+  const unset = map.get('unset')!
+
   for (const a of activities) {
-    const key: LeadSource | 'unset' = a.leadSource ?? 'unset'
-    const row = map.get(key)
-    if (!row) continue
+    const key =
+      a.leadSource != null && a.leadSource !== '' && map.has(a.leadSource)
+        ? a.leadSource
+        : 'unset'
+    const row = key === 'unset' ? unset : map.get(key)!
     row.activityCount += 1
     row.quoteSum += a.quoteCount
     if (a.quoteCount > 0) row.activitiesWithQuote += 1
   }
 
-  return [...map.values()]
+  const out: LeadSourceAggRow[] = []
+  for (const { id } of catalog) {
+    const row = map.get(id)
+    if (row) out.push(row)
+  }
+  out.push(unset)
+  return out
 }
 
 /** 活動件数が1件以上ある経路だけ（グラフ用） */
@@ -62,7 +72,8 @@ export function filterActivitiesByPeriodScope(
   fiscalYearStartMonth: number,
   /** 年次モードで参照する会計年度の開始年 */
   fiscalFocusStartYear: number,
-): ActivityLog[] {  return activities.filter((a) => {
+): ActivityLog[] {
+  return activities.filter((a) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(a.date)) return false
     const ym = a.date.slice(0, 7)
     if (periodGroup === 'all') return true

@@ -7,8 +7,7 @@ import {
   sumTotals,
   totalSalesActivities,
 } from './metrics'
-import type { ActivityLog, LeadSource, User } from './types'
-import { LEAD_SOURCES, LEAD_SOURCE_LABEL } from './types'
+import type { ActivityLog, SelectOptionItem, User } from './types'
 
 export type UserPeriodTotals = {
   userId: string
@@ -95,23 +94,31 @@ export function tabValueForUser(
 export type LeadStackRow = {
   name: string
   userId: string
-} & Record<LeadSource | 'unset', number>
+  [stackKey: string]: string | number
+}
+
+export function leadStackKeysFromCatalog(catalog: SelectOptionItem[]): string[] {
+  return [...catalog.map((c) => c.id), 'unset']
+}
+
+export function leadStackLabel(key: string, catalog: SelectOptionItem[]): string {
+  if (key === 'unset') return '流入未設定'
+  return catalog.find((c) => c.id === key)?.label ?? key
+}
 
 export function buildLeadSourceStackRows(
   users: User[],
   allActivities: ActivityLog[],
+  leadCatalog: SelectOptionItem[],
   periodGroup: PeriodGroupMode,
   focusMonthYm: string,
   todayYmd: string,
   fiscalYearStartMonth: number,
   fiscalFocusStartYear: number,
 ): LeadStackRow[] {
-  const zeros = (): Record<LeadSource | 'unset', number> => {
-    const o = {} as Record<LeadSource | 'unset', number>
-    for (const k of LEAD_SOURCES) o[k] = 0
-    o.unset = 0
-    return o
-  }
+  const keys = leadStackKeysFromCatalog(leadCatalog)
+  const zeros = (): Record<string, number> =>
+    Object.fromEntries(keys.map((k) => [k, 0]))
 
   return users.map((u) => {
     const mine = allActivities.filter((a) => a.userId === u.id)
@@ -124,20 +131,10 @@ export function buildLeadSourceStackRows(
       fiscalFocusStartYear,
     )
     const counts = zeros()
-    const agg = aggregateByLeadSource(scoped)
+    const agg = aggregateByLeadSource(scoped, leadCatalog)
     for (const r of agg) {
-      counts[r.key] = r.activityCount
+      if (r.key in counts) counts[r.key] = r.activityCount
     }
     return { name: u.name, userId: u.id, ...counts }
   })
-}
-
-export const LEAD_STACK_KEYS: (LeadSource | 'unset')[] = [
-  ...LEAD_SOURCES,
-  'unset',
-]
-
-export function leadStackLabel(key: LeadSource | 'unset'): string {
-  if (key === 'unset') return '流入未設定'
-  return LEAD_SOURCE_LABEL[key]
 }

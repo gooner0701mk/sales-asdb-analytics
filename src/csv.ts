@@ -1,5 +1,5 @@
 import type { ActivityLog, ActivityType } from './types'
-import { parseLeadSource } from './types'
+import { parseLeadSourceIdForImport } from './types'
 import { createId } from './createId'
 
 const ACT_HEADER =
@@ -43,6 +43,7 @@ function parseNum(s: string): number {
 export function parseActivityCSV(
   text: string,
   defaultUserId: string,
+  allowedLeadSourceIds: Set<string>,
 ): ActivityLog[] {
   const lines = text
     .split(/\r?\n/)
@@ -77,7 +78,9 @@ export function parseActivityCSV(
         ? (cols[iUser] ?? '').trim()
         : defaultUserId
     const leadRaw =
-      iLead >= 0 ? parseLeadSource((cols[iLead] ?? '').trim()) : null
+      iLead >= 0
+        ? parseLeadSourceIdForImport((cols[iLead] ?? '').trim(), allowedLeadSourceIds)
+        : null
     out.push({
       id: createId(),
       userId: uid,

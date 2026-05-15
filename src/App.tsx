@@ -63,7 +63,7 @@ import {
   type PeriodGroupMode,
 } from './periodGroup'
 import {
-  LEAD_STACK_KEYS,
+  leadStackKeysFromCatalog,
   USER_COMPARE_TABS,
   buildLeadSourceStackRows,
   buildUserPeriodTotals,
@@ -89,14 +89,13 @@ import type {
   ActivityType,
   AppState,
   DataViewUserIds,
-  LeadSource,
 } from './types'
 import {
-  ACTIVITY_TYPE_LABEL,
-  LEAD_SOURCE_LABEL,
-  LEAD_SOURCES,
+  ACTIVITY_TYPES_ORDER,
+  activityTypeDisplayLabel,
   emptyMilestones,
   emptyState,
+  labelForLeadSourceId,
   newUser,
 } from './types'
 import { useMediaQuery } from './useMediaQuery'
@@ -305,6 +304,8 @@ function DashboardApp({
     invoiceAnnualRevenueTargets,
     companySettings,
     estimateTasks,
+    leadSourceCatalog,
+    activityTypeLabels,
   } = state
 
   const fiscalSm = companySettings.fiscalYearStartMonth
@@ -349,10 +350,21 @@ function DashboardApp({
 
   const [formDate, setFormDate] = useState(() => todayIsoDate())
   const [formCustomer, setFormCustomer] = useState('')
-  const [formLeadSource, setFormLeadSource] = useState<LeadSource | null>(null)
+  const [formLeadSource, setFormLeadSource] = useState<string | null>(null)
   const [formType, setFormType] = useState<ActivityType>('teleAppo')
   const [formQuote, setFormQuote] = useState(0)
   const [formOrder, setFormOrder] = useState(0)
+  const leadSourceIdSet = useMemo(
+    () => new Set(leadSourceCatalog.map((x) => x.id)),
+    [leadSourceCatalog],
+  )
+
+  useEffect(() => {
+    setFormLeadSource((cur) =>
+      cur != null && cur !== '' && !leadSourceIdSet.has(cur) ? null : cur,
+    )
+  }, [leadSourceIdSet])
+
   const [syncApproach, setSyncApproach] = useState(true)
   const [syncOrderDate, setSyncOrderDate] = useState(true)
   const [periodGroup, setPeriodGroup] = useState<PeriodGroupMode>('month')
@@ -511,8 +523,9 @@ function DashboardApp({
   )
 
   const leadSourceAggAll = useMemo(
-    () => aggregateByLeadSource(scopedActivitiesForLeadSource),
-    [scopedActivitiesForLeadSource],
+    () =>
+      aggregateByLeadSource(scopedActivitiesForLeadSource, leadSourceCatalog),
+    [scopedActivitiesForLeadSource, leadSourceCatalog],
   )
 
   const leadByActivityDesc = useMemo(
@@ -579,6 +592,7 @@ function DashboardApp({
       buildLeadSourceStackRows(
         users,
         activities,
+        leadSourceCatalog,
         periodGroup,
         focusMonthYm,
         todayIsoDate(),
@@ -588,6 +602,7 @@ function DashboardApp({
     [
       users,
       activities,
+      leadSourceCatalog,
       periodGroup,
       focusMonthYm,
       calendarTick,
@@ -644,12 +659,12 @@ function DashboardApp({
     type ChartRow = ReturnType<typeof chartRows>[number]
     type BarRow = {
       name: string
-      飛び込み: number
-      テレアポ: number
-      商談: number
-      接待: number
-      見積もり: number
-      受注: number
+      coldVisits: number
+      teleAppo: number
+      meetings: number
+      receptions: number
+      quotes: number
+      closedWon: number
     }
     type Slice = {
       chartData: ChartRow[]
@@ -691,12 +706,12 @@ function DashboardApp({
         chartData,
         barComparisonRows: chartData.map((row) => ({
           name: row.label,
-          飛び込み: row.coldVisits,
-          テレアポ: row.teleAppo,
-          商談: row.meetings,
-          接待: row.receptions,
-          見積もり: row.quotes,
-          受注: row.closedWon,
+          coldVisits: row.coldVisits,
+          teleAppo: row.teleAppo,
+          meetings: row.meetings,
+          receptions: row.receptions,
+          quotes: row.quotes,
+          closedWon: row.closedWon,
         })),
         hasData: sliced.length > 0,
         lineXAxisProps: {
@@ -975,7 +990,7 @@ function DashboardApp({
     reader.onload = () => {
       try {
         const text = String(reader.result ?? '')
-        const next = parseActivityCSV(text, defaultCsvUserId)
+        const next = parseActivityCSV(text, defaultCsvUserId, leadSourceIdSet)
         if (next.length === 0) throw new Error('有効な行がありません')
         setState((prev) => mergeActivityCsvIntoState(prev, next))
         showToast(`活動${next.length}件を取り込みました`)
@@ -1294,13 +1309,13 @@ function DashboardApp({
                   value={formLeadSource ?? ''}
                   onChange={(e) => {
                     const v = e.target.value
-                    setFormLeadSource(v === '' ? null : (v as LeadSource))
+                    setFormLeadSource(v === '' ? null : v)
                   }}
                 >
                   <option value="">未選択</option>
-                  {LEAD_SOURCES.map((k) => (
-                    <option key={k} value={k}>
-                      {LEAD_SOURCE_LABEL[k]}
+                  {leadSourceCatalog.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.label}
                     </option>
                   ))}
                 </select>
@@ -1314,13 +1329,11 @@ function DashboardApp({
                     setFormType(e.target.value as ActivityType)
                   }
                 >
-                  {(Object.keys(ACTIVITY_TYPE_LABEL) as ActivityType[]).map(
-                    (k) => (
-                      <option key={k} value={k}>
-                        {ACTIVITY_TYPE_LABEL[k]}
-                      </option>
-                    ),
-                  )}
+                  {ACTIVITY_TYPES_ORDER.map((k) => (
+                    <option key={k} value={k}>
+                      {activityTypeDisplayLabel(activityTypeLabels, k)}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="field">
@@ -1390,11 +1403,11 @@ function DashboardApp({
                     <div className="activity-meta">
                       <span className="activity-date">{a.date}</span>
                       <span className="activity-type-pill">
-                        {ACTIVITY_TYPE_LABEL[a.activityType]}
+                        {activityTypeDisplayLabel(activityTypeLabels, a.activityType)}
                       </span>
                       {a.leadSource && (
                         <span className="activity-lead-pill" title="流入経路">
-                          {LEAD_SOURCE_LABEL[a.leadSource]}
+                          {labelForLeadSourceId(leadSourceCatalog, a.leadSource)}
                         </span>
                       )}
                       {dataViewShowsOwnerColumn(dataViewUserIds) && (
@@ -1649,7 +1662,11 @@ function DashboardApp({
             <article className="card">
               <h3>営業件数（合計）</h3>
               <p className="card-value">{salesActs.toLocaleString()}</p>
-              <p className="card-note">飛び込み＋テレアポ＋商談＋接待</p>
+              <p className="card-note">
+                {ACTIVITY_TYPES_ORDER.map((k) =>
+                  activityTypeDisplayLabel(activityTypeLabels, k),
+                ).join('＋')}
+              </p>
             </article>
             <article className="card">
               <h3>見積÷営業件数</h3>
@@ -1662,19 +1679,19 @@ function DashboardApp({
               <p className="card-note">見積0の月は0%</p>
             </article>
             <article className="card">
-              <h3>飛び込み</h3>
+              <h3>{activityTypeDisplayLabel(activityTypeLabels, 'coldVisit')}</h3>
               <p className="card-value">{totals.coldVisits.toLocaleString()}</p>
             </article>
             <article className="card">
-              <h3>テレアポ</h3>
+              <h3>{activityTypeDisplayLabel(activityTypeLabels, 'teleAppo')}</h3>
               <p className="card-value">{totals.teleAppo.toLocaleString()}</p>
             </article>
             <article className="card">
-              <h3>商談</h3>
+              <h3>{activityTypeDisplayLabel(activityTypeLabels, 'meeting')}</h3>
               <p className="card-value">{totals.meetings.toLocaleString()}</p>
             </article>
             <article className="card">
-              <h3>接待</h3>
+              <h3>{activityTypeDisplayLabel(activityTypeLabels, 'reception')}</h3>
               <p className="card-value">{totals.receptions.toLocaleString()}</p>
             </article>
             <article className="card">
@@ -1921,7 +1938,7 @@ function DashboardApp({
                       <Line
                         type="monotone"
                         dataKey="coldVisits"
-                        name="飛び込み"
+                        name={activityTypeDisplayLabel(activityTypeLabels, 'coldVisit')}
                         stroke={c.coldVisit}
                         strokeWidth={2}
                         dot={false}
@@ -1929,7 +1946,7 @@ function DashboardApp({
                       <Line
                         type="monotone"
                         dataKey="teleAppo"
-                        name="テレアポ"
+                        name={activityTypeDisplayLabel(activityTypeLabels, 'teleAppo')}
                         stroke={c.teleAppo}
                         strokeWidth={2}
                         dot={false}
@@ -1937,7 +1954,7 @@ function DashboardApp({
                       <Line
                         type="monotone"
                         dataKey="meetings"
-                        name="商談"
+                        name={activityTypeDisplayLabel(activityTypeLabels, 'meeting')}
                         stroke={c.meeting}
                         strokeWidth={2}
                         dot={false}
@@ -1945,7 +1962,7 @@ function DashboardApp({
                       <Line
                         type="monotone"
                         dataKey="receptions"
-                        name="接待"
+                        name={activityTypeDisplayLabel(activityTypeLabels, 'reception')}
                         stroke={c.reception}
                         strokeWidth={2}
                         dot={false}
@@ -2101,7 +2118,11 @@ function DashboardApp({
             </div>
             <div className="panel full">
               <h2>
-                {periodChartTitle}：件数比較（飛び込み・テレアポ・商談・接待・見積・受注）
+                {periodChartTitle}：件数比較（
+                {ACTIVITY_TYPES_ORDER.map((k) =>
+                  activityTypeDisplayLabel(activityTypeLabels, k),
+                ).join('・')}
+                ・見積・受注）
               </h2>
               {trendChartMonthToolbar('countsBar')}
               <div className="chart-wrap">
@@ -2125,12 +2146,32 @@ function DashboardApp({
                       <YAxis allowDecimals={false} />
                       <Tooltip />
                       <Legend />
-                      <Bar dataKey="飛び込み" fill={c.coldVisit} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="テレアポ" fill={c.teleAppo} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="商談" fill={c.meeting} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="接待" fill={c.reception} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="見積もり" fill={c.quote} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="受注" fill={c.closedWon} radius={[4, 4, 0, 0]} />
+                      <Bar
+                        dataKey="coldVisits"
+                        name={activityTypeDisplayLabel(activityTypeLabels, 'coldVisit')}
+                        fill={c.coldVisit}
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="teleAppo"
+                        name={activityTypeDisplayLabel(activityTypeLabels, 'teleAppo')}
+                        fill={c.teleAppo}
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="meetings"
+                        name={activityTypeDisplayLabel(activityTypeLabels, 'meeting')}
+                        fill={c.meeting}
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="receptions"
+                        name={activityTypeDisplayLabel(activityTypeLabels, 'reception')}
+                        fill={c.reception}
+                        radius={[4, 4, 0, 0]}
+                      />
+                      <Bar dataKey="quotes" name="見積もり" fill={c.quote} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="closedWon" name="受注" fill={c.closedWon} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -2175,12 +2216,12 @@ function DashboardApp({
                       <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                       <Tooltip />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      {LEAD_STACK_KEYS.map((key, i) => (
+                      {leadStackKeysFromCatalog(leadSourceCatalog).map((key, i) => (
                         <Bar
                           key={key}
                           dataKey={key}
                           stackId="lead"
-                          name={leadStackLabel(key)}
+                          name={leadStackLabel(key, leadSourceCatalog)}
                           fill={
                             [
                               '#2563eb',
@@ -2265,6 +2306,7 @@ function DashboardApp({
           setState={setState}
           showToast={showToast}
           activities={activities}
+          leadSourceCatalog={leadSourceCatalog}
         />
       ) : pageTab === 'invoices' ? (
         <InvoicesTab
@@ -2292,6 +2334,8 @@ function DashboardApp({
         <SettingsTab
           users={users}
           companySettings={companySettings}
+          leadSourceCatalog={leadSourceCatalog}
+          activityTypeLabels={activityTypeLabels}
           setState={setState}
           showToast={showToast}
         />

@@ -14,14 +14,17 @@ import type {
 import { createId } from './createId'
 import { isoDaysAgo } from './dates'
 import {
+  ACTIVITY_TYPES_ORDER,
   DEFAULT_COMPANY_SETTINGS,
+  defaultLeadSourceCatalog,
   emptyState,
   newApproachTarget,
   newUser,
+  normalizeLeadSourceCatalog,
   normalizeStoredActivity,
   normalizeStoredEstimateTask,
+  type ActivityType,
   type CompanySettings,
-  type LeadSource,
 } from './types'
 
 const STORAGE_KEY_V8 = 'sales-newbiz-v8'
@@ -45,13 +48,17 @@ function migrateV4ToCurrent(v4: AppStateV4): AppState {
       lastOrderDate: v4.lastOrderDate,
     },
   }
+  const leadCat = defaultLeadSourceCatalog()
+  const leadSet = new Set(leadCat.map((c) => c.id))
   const activities: ActivityLog[] = v4.activities
-    .map((a) => normalizeStoredActivity({ ...a, userId: u.id }))
+    .map((a) => normalizeStoredActivity({ ...a, userId: u.id }, leadSet))
     .filter((x): x is ActivityLog => x !== null)
 
   return {
     version: 8,
     users: [u],
+    leadSourceCatalog: leadCat,
+    activityTypeLabels: {},
     sessionUserId: u.id,
     dataViewUserIds: [u.id],
     activities,
@@ -183,6 +190,19 @@ function normalizeDataViewUserIds(
   return users[0]?.id ? [users[0].id] : 'all'
 }
 
+function parseActivityTypeLabels(
+  raw: unknown,
+): Partial<Record<ActivityType, string>> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const r = raw as Record<string, unknown>
+  const out: Partial<Record<ActivityType, string>> = {}
+  for (const t of ACTIVITY_TYPES_ORDER) {
+    const v = r[t]
+    if (typeof v === 'string' && v.trim()) out[t] = v.trim()
+  }
+  return out
+}
+
 /** v5 以降の生 JSON を正規化（常に v8） */
 export function normalizeStoredStateRecord(o: Record<string, unknown>): AppState {
   const users = (o.users as User[]) ?? []
@@ -190,9 +210,11 @@ export function normalizeStoredStateRecord(o: Record<string, unknown>): AppState
     typeof o.sessionUserId === 'string' || o.sessionUserId === null
       ? (o.sessionUserId as string | null)
       : null
+  const leadSourceCatalog = normalizeLeadSourceCatalog(o.leadSourceCatalog)
+  const leadSourceIdSet = new Set(leadSourceCatalog.map((x) => x.id))
   const rawActs = (o.activities as unknown[]) ?? []
   const activities: ActivityLog[] = rawActs
-    .map((x) => normalizeStoredActivity(x))
+    .map((x) => normalizeStoredActivity(x, leadSourceIdSet))
     .filter((a): a is ActivityLog => a !== null)
   const milestonesByUser =
     (o.milestonesByUser as Record<string, UserMilestones>) ?? {}
@@ -225,6 +247,8 @@ export function normalizeStoredStateRecord(o: Record<string, unknown>): AppState
   return {
     version: 8,
     users,
+    leadSourceCatalog,
+    activityTypeLabels: parseActivityTypeLabels(o.activityTypeLabels),
     sessionUserId,
     dataViewUserIds,
     activities,
@@ -323,7 +347,7 @@ export function sampleState(): AppState {
     activityType: ActivityLog['activityType'],
     quoteCount: number,
     orderCount: number,
-    leadSource: LeadSource | null = null,
+    leadSource: string | null = null,
   ): ActivityLog => ({
     id: createId(),
     userId,
@@ -380,6 +404,8 @@ export function sampleState(): AppState {
   return {
     version: 8,
     users: [yamada, sato],
+    leadSourceCatalog: defaultLeadSourceCatalog(),
+    activityTypeLabels: {},
     sessionUserId: yamada.id,
     dataViewUserIds: [yamada.id],
     activities,

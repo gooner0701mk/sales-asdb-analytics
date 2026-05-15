@@ -5,8 +5,8 @@ import { createId } from './createId'
 /** 1回の営業活動ログ */
 export type ActivityType = 'coldVisit' | 'teleAppo' | 'meeting' | 'reception'
 
-/** 流入経路（活動の報告内容） */
-export type LeadSource =
+/** 既定の流入経路キー（互換・CSV 用） */
+export type BuiltinLeadSourceId =
   | 'fromList'
   | 'fromBidResult'
   | 'fromConstructionSign'
@@ -15,7 +15,10 @@ export type LeadSource =
   | 'fromRequest'
   | 'fromExistingCustomer'
 
-export const LEAD_SOURCES: readonly LeadSource[] = [
+/** @deprecated 活動ログでは string（カタログ id）を使用 */
+export type LeadSource = BuiltinLeadSourceId
+
+export const LEAD_SOURCES: readonly BuiltinLeadSourceId[] = [
   'fromList',
   'fromBidResult',
   'fromConstructionSign',
@@ -25,7 +28,7 @@ export const LEAD_SOURCES: readonly LeadSource[] = [
   'fromExistingCustomer',
 ] as const
 
-export const LEAD_SOURCE_LABEL: Record<LeadSource, string> = {
+export const LEAD_SOURCE_LABEL: Record<BuiltinLeadSourceId, string> = {
   fromList: 'リストから',
   fromBidResult: '入札結果から',
   fromConstructionSign: '工事看板等から',
@@ -35,12 +38,67 @@ export const LEAD_SOURCE_LABEL: Record<LeadSource, string> = {
   fromExistingCustomer: '既存顧客',
 }
 
-export function parseLeadSource(raw: unknown): LeadSource | null {
+/** 活動フォーム・集計で使う選択肢（id + 表示名） */
+export type SelectOptionItem = { id: string; label: string }
+
+export function defaultLeadSourceCatalog(): SelectOptionItem[] {
+  return LEAD_SOURCES.map((id) => ({ id, label: LEAD_SOURCE_LABEL[id] }))
+}
+
+/** 表示用ラベル（カタログに無い id はそのまま表示） */
+export function labelForLeadSourceId(
+  catalog: SelectOptionItem[],
+  id: string | null,
+): string {
+  if (id == null || id === '') return '―'
+  const row = catalog.find((c) => c.id === id)
+  return row?.label ?? id
+}
+
+/** 既定の7件＋保存済みの追加行をマージ（既定 id の欠落を防ぐ） */
+export function normalizeLeadSourceCatalog(raw: unknown): SelectOptionItem[] {
+  const fromDefaults = () => defaultLeadSourceCatalog()
+  if (!Array.isArray(raw) || raw.length === 0) return fromDefaults()
+  const parsed: SelectOptionItem[] = []
+  const seen = new Set<string>()
+  for (const x of raw) {
+    if (!x || typeof x !== 'object') continue
+    const r = x as Record<string, unknown>
+    const id = typeof r.id === 'string' ? r.id.trim() : ''
+    if (!id || seen.has(id)) continue
+    const label =
+      typeof r.label === 'string' && r.label.trim() ? r.label.trim() : id
+    seen.add(id)
+    parsed.push({ id, label })
+  }
+  const byId = new Map(parsed.map((p) => [p.id, p]))
+  const head: SelectOptionItem[] = []
+  for (const bid of LEAD_SOURCES) {
+    head.push(byId.get(bid) ?? { id: bid, label: LEAD_SOURCE_LABEL[bid] })
+  }
+  const tail = parsed.filter((p) => !(LEAD_SOURCES as readonly string[]).includes(p.id))
+  return [...head, ...tail]
+}
+
+export function parseLeadSource(raw: unknown): BuiltinLeadSourceId | null {
   if (raw === null || raw === undefined) return null
   if (typeof raw !== 'string') return null
   const s = raw.trim()
   if (!s) return null
-  return (LEAD_SOURCES as readonly string[]).includes(s) ? (s as LeadSource) : null
+  return (LEAD_SOURCES as readonly string[]).includes(s) ? (s as BuiltinLeadSourceId) : null
+}
+
+/** CSV 等: 許可 id 集合に含まれる流入経路だけ通す */
+export function parseLeadSourceIdForImport(
+  raw: unknown,
+  allowedIds: Set<string>,
+): string | null {
+  if (raw === null || raw === undefined) return null
+  if (typeof raw !== 'string') return null
+  const s = raw.trim()
+  if (!s) return null
+  if (allowedIds.has(s)) return s
+  return null
 }
 
 const ACTIVITY_TYPES: readonly ActivityType[] = [
@@ -55,7 +113,10 @@ function isActivityTypeString(s: unknown): s is ActivityType {
 }
 
 /** localStorage / JSON からの1件を ActivityLog に正規化。不正なら null */
-export function normalizeStoredActivity(x: unknown): ActivityLog | null {
+export function normalizeStoredActivity(
+  x: unknown,
+  leadSourceIdSet: Set<string>,
+): ActivityLog | null {
   if (!x || typeof x !== 'object') return null
   const r = x as Record<string, unknown>
   if (
@@ -76,12 +137,18 @@ export function normalizeStoredActivity(x: unknown): ActivityLog | null {
     typeof r.orderCount === 'number'
       ? r.orderCount
       : Number.parseInt(String(r.orderCount ?? ''), 10)
+  let leadSource: string | null = null
+  const ls = r.leadSource
+  if (ls !== null && ls !== undefined && typeof ls === 'string') {
+    const t = ls.trim()
+    if (t && leadSourceIdSet.has(t)) leadSource = t
+  }
   return {
     id: r.id,
     userId: r.userId,
     date: r.date,
     customerName: r.customerName,
-    leadSource: parseLeadSource(r.leadSource),
+    leadSource,
     activityType: r.activityType,
     quoteCount: Number.isFinite(q) ? Math.max(0, Math.round(q)) : 0,
     orderCount: Number.isFinite(o) ? Math.max(0, Math.round(o)) : 0,
@@ -105,8 +172,8 @@ export type ActivityLog = {
   /** 活動日 YYYY-MM-DD */
   date: string
   customerName: string
-  /** 流入経路。未設定は null */
-  leadSource: LeadSource | null
+  /** 流入経路（leadSourceCatalog の id）。未設定は null */
+  leadSource: string | null
   activityType: ActivityType
   /** この活動に紐づく見積もり件数（0以上の整数） */
   quoteCount: number
@@ -291,6 +358,13 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
 export type AppState = {
   version: 8
   users: User[]
+  /** 活動ログの流入経路の選択肢（順序はフォーム・集計に反映） */
+  leadSourceCatalog: SelectOptionItem[]
+  /**
+   * 営業種類4種の表示名オーバーライド（キーが無いときは ACTIVITY_TYPE_LABEL）。
+   * 集計キー（coldVisit 等）は変更しません。
+   */
+  activityTypeLabels: Partial<Record<ActivityType, string>>
   /** 会社名・会計年度・期番号の表示設定 */
   companySettings: CompanySettings
   /** 活動の登録者・「自分」の集計に使うユーザー */
@@ -323,6 +397,22 @@ export const ACTIVITY_TYPE_LABEL: Record<ActivityType, string> = {
   reception: '接待',
 }
 
+export const ACTIVITY_TYPES_ORDER: readonly ActivityType[] = [
+  'coldVisit',
+  'teleAppo',
+  'meeting',
+  'reception',
+] as const
+
+export function activityTypeDisplayLabel(
+  overrides: Partial<Record<ActivityType, string>> | undefined,
+  t: ActivityType,
+): string {
+  const o = overrides?.[t]
+  if (typeof o === 'string' && o.trim()) return o.trim()
+  return ACTIVITY_TYPE_LABEL[t]
+}
+
 export function newUser(name: string): User {
   return { id: createId(), name: name.trim() || '無名' }
 }
@@ -336,6 +426,8 @@ export function emptyState(): AppState {
   return {
     version: 8,
     users: [u],
+    leadSourceCatalog: defaultLeadSourceCatalog(),
+    activityTypeLabels: {},
     companySettings: { ...DEFAULT_COMPANY_SETTINGS },
     sessionUserId: u.id,
     dataViewUserIds: [u.id],

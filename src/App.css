@@ -1898,3 +1898,34 @@
 .estimate-tasks-stats-total td {
   border-top: 1px solid var(--border);
 }
+
+/* 設定タブ: 流入経路・営業種類カタログ */
+.settings-subheading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.settings-catalog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.settings-mono-cell,
+.table-cell-mono {
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 0.82rem;
+}
+
+.settings-catalog-panel .settings-catalog-table {
+  margin-top: 0.35rem;
+}
+
+.settings-catalog-panel .hint.small {
+  display: block;
+  margin-top: 0.25rem;
+}
+

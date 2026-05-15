@@ -1,9 +1,4 @@
-import type {
-  ActivityLog,
-  ActivityType,
-  LeadSource,
-  UserMilestones,
-} from './types'
+import type { ActivityLog, ActivityType, UserMilestones } from './types'
 
 /** 飛び込み・テレアポをアプローチ種別とみなす */
 export function isApproachActivityType(t: ActivityType): boolean {
@@ -87,7 +82,7 @@ export function inferLeadSourceForCompany(
   activities: ActivityLog[],
   ownerUserId: string,
   companyName: string,
-): LeadSource | null {
+): string | null {
   if (!normalizeCompanyKey(companyName)) return null
   const rows = activities.filter((a) =>
     companyNamesMatchForSync(a.customerName, companyName),

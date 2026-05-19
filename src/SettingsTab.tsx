@@ -4,6 +4,8 @@ import {
   fiscalYearRangeLabel,
   fyStartYearFromCalendarYm,
 } from './fiscalYear'
+import { attendanceLabels as attendanceT } from './attendance/labels'
+import { hashAttendancePassword } from './attendance/password'
 import { todayIsoDate } from './dates'
 import { createId } from './createId'
 import type {
@@ -68,6 +70,8 @@ type Props = {
   companySettings: CompanySettings
   leadSourceCatalog: SelectOptionItem[]
   activityTypeCatalog: ActivityTypeCatalogItem[]
+  attendanceAdminUserIds: string[]
+  attendanceCorrectionPasswordHash: string
   setState: Dispatch<SetStateAction<AppState>>
   showToast: (msg: string) => void
 }
@@ -77,6 +81,8 @@ export function SettingsTab({
   companySettings,
   leadSourceCatalog,
   activityTypeCatalog,
+  attendanceAdminUserIds,
+  attendanceCorrectionPasswordHash,
   setState,
   showToast,
 }: Props) {
@@ -88,6 +94,11 @@ export function SettingsTab({
   const [activityDraft, setActivityDraft] = useState<ActivityTypeCatalogItem[]>(
     () => activityTypeCatalog.map((x) => ({ ...x })),
   )
+  const [attendanceAdminDraft, setAttendanceAdminDraft] = useState<string[]>(
+    () => [...attendanceAdminUserIds],
+  )
+  const [correctionPw, setCorrectionPw] = useState('')
+  const [correctionPwConfirm, setCorrectionPwConfirm] = useState('')
 
   useEffect(() => {
     setActivityDraft(activityTypeCatalog.map((x) => ({ ...x })))
@@ -113,6 +124,10 @@ export function SettingsTab({
   useEffect(() => {
     setLeadDraft(leadSourceCatalog)
   }, [leadSourceCatalog])
+
+  useEffect(() => {
+    setAttendanceAdminDraft([...attendanceAdminUserIds])
+  }, [attendanceAdminUserIds])
 
   const previewFy = fyStartYearFromCalendarYm(todayIsoDate().slice(0, 7), draftCompany.fiscalYearStartMonth)
   const previewTerm = fiscalTermNumberForStartYear(
@@ -538,6 +553,102 @@ export function SettingsTab({
             営業種類を保存
           </button>
         </div>
+      </section>
+
+      <section className="panel">
+        <h2 className="targets-heading">勤怠の管理者</h2>
+        <p className="hint small">
+          チェックした担当者は、勤怠タブで<strong>残業の承認・却下</strong>ができます（複数指定可）。未指定のときは誰も承認できません。
+        </p>
+        <ul className="settings-attendance-admin-list">
+          {users.map((u) => (
+            <li key={u.id}>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={attendanceAdminDraft.includes(u.id)}
+                  onChange={(e) => {
+                    setAttendanceAdminDraft((prev) =>
+                      e.target.checked
+                        ? [...prev, u.id]
+                        : prev.filter((id) => id !== u.id),
+                    )
+                  }}
+                />
+                {u.name}
+              </label>
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() => {
+            const idSet = new Set(users.map((u) => u.id))
+            const next = attendanceAdminDraft.filter((id) => idSet.has(id))
+            setState((prev) => ({ ...prev, attendanceAdminUserIds: next }))
+            showToast('勤怠管理者を保存しました')
+          }}
+        >
+          勤怠管理者を保存
+        </button>
+      </section>
+
+      <section className="panel">
+        <h2 className="targets-heading">{attendanceT.settingsCorrectionPassword}</h2>
+        <p className="hint small">{attendanceT.settingsCorrectionPasswordHint}</p>
+        <p className="hint small">{attendanceT.samplePasswordNote}</p>
+        {attendanceCorrectionPasswordHash ? (
+          <p className="hint small">現在、打刻修正用パスワードは設定済みです（表示はされません）。</p>
+        ) : null}
+        <label className="field">
+          <span className="field-label">{attendanceT.settingsCorrectionPassword}</span>
+          <input
+            type="password"
+            className="cell-input"
+            value={correctionPw}
+            onChange={(e) => setCorrectionPw(e.target.value)}
+            autoComplete="new-password"
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">{attendanceT.settingsCorrectionPasswordConfirm}</span>
+          <input
+            type="password"
+            className="cell-input"
+            value={correctionPwConfirm}
+            onChange={(e) => setCorrectionPwConfirm(e.target.value)}
+            autoComplete="new-password"
+          />
+        </label>
+        <button
+          type="button"
+          className="btn primary"
+          onClick={() => {
+            void (async () => {
+              const a = correctionPw.trim()
+              const b = correctionPwConfirm.trim()
+              if (!a) {
+                showToast(attendanceT.correctionNoPassword)
+                return
+              }
+              if (a !== b) {
+                showToast(attendanceT.settingsCorrectionPasswordMismatch)
+                return
+              }
+              const hash = await hashAttendancePassword(a)
+              setState((prev) => ({
+                ...prev,
+                attendanceCorrectionPasswordHash: hash,
+              }))
+              setCorrectionPw('')
+              setCorrectionPwConfirm('')
+              showToast(attendanceT.settingsCorrectionPasswordSaved)
+            })()
+          }}
+        >
+          {attendanceT.settingsCorrectionPasswordSave}
+        </button>
       </section>
 
       <section className="panel settings-users-panel">

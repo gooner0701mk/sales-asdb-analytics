@@ -1906,6 +1906,15 @@
   margin: 1.25rem 0 0.5rem;
 }
 
+.settings-attendance-admin-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .settings-catalog-actions {
   display: flex;
   flex-wrap: wrap;

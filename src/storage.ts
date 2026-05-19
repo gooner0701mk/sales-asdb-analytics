@@ -14,6 +14,13 @@ import type {
 import { createId } from './createId'
 import { isoDaysAgo } from './dates'
 import {
+  parseAttendanceAdminUserIds,
+  parseAttendanceRecords,
+} from './attendance/normalize'
+import { parseOvertimeRequests } from './attendance/overtimeRequests'
+import { sampleAttendanceRecords } from './attendance/sampleRecords'
+import { sampleOvertimeRequests } from './attendance/sampleOvertimeRequests'
+import {
   DEFAULT_COMPANY_SETTINGS,
   defaultActivityTypeCatalog,
   defaultLeadSourceCatalog,
@@ -76,6 +83,11 @@ function migrateV4ToCurrent(v4: AppStateV4): AppState {
     companySettings: { ...DEFAULT_COMPANY_SETTINGS },
     chartColors: mergeChartColors(undefined),
     estimateTasks: [],
+    attendanceRecords: [],
+    attendanceOvertimeRequests: [],
+    attendanceAdminUserIds: [],
+    attendanceCorrectionPasswordHash: '',
+    attendanceApprovalPasswordHash: '',
   }
 }
 
@@ -247,6 +259,25 @@ export function normalizeStoredStateRecord(o: Record<string, unknown>): AppState
     dataViewUserIds = dataViewUserIds.filter((id) => users.some((u) => u.id === id))
   }
 
+  const userIdSet = new Set(users.map((u) => u.id))
+  const attendanceRecords = parseAttendanceRecords(o.attendanceRecords, userIdSet)
+  const attendanceOvertimeRequests = parseOvertimeRequests(
+    o.attendanceOvertimeRequests,
+    userIdSet,
+  )
+  const attendanceAdminUserIds = parseAttendanceAdminUserIds(
+    o.attendanceAdminUserIds,
+    userIdSet,
+  )
+  const attendanceCorrectionPasswordHash =
+    typeof o.attendanceCorrectionPasswordHash === 'string'
+      ? o.attendanceCorrectionPasswordHash.trim()
+      : ''
+  const attendanceApprovalPasswordHash =
+    typeof o.attendanceApprovalPasswordHash === 'string'
+      ? o.attendanceApprovalPasswordHash.trim()
+      : ''
+
   return {
     version: 8,
     users,
@@ -263,6 +294,11 @@ export function normalizeStoredStateRecord(o: Record<string, unknown>): AppState
     companySettings,
     chartColors: mergeChartColors(o.chartColors),
     estimateTasks,
+    attendanceRecords,
+    attendanceOvertimeRequests,
+    attendanceAdminUserIds,
+    attendanceCorrectionPasswordHash,
+    attendanceApprovalPasswordHash,
   }
 }
 
@@ -343,6 +379,24 @@ export function clearStorage(): void {
 export function sampleState(): AppState {
   const yamada = newUser('山田')
   const sato = newUser('佐藤')
+  const kunieda = newUser('國枝')
+  const mukai = newUser('向井')
+  const fuchigami = newUser('渕上')
+  const mifune = newUser('三船')
+  const nishi = newUser('西')
+  const kimura = newUser('木村')
+  const tanaka = newUser('田中')
+  const users = [
+    yamada,
+    sato,
+    kunieda,
+    mukai,
+    fuchigami,
+    mifune,
+    nishi,
+    kimura,
+    tanaka,
+  ]
   const mk = (
     userId: string,
     daysAgo: number,
@@ -404,13 +458,19 @@ export function sampleState(): AppState {
     mkInv(yamada.id, 12, 'テック商事', 198000),
   ]
 
+  const attendanceRecords = sampleAttendanceRecords(users, yamada.id)
+  const attendanceOvertimeRequests = sampleOvertimeRequests(
+    users,
+    yamada.name,
+  )
+
   return {
     version: 8,
-    users: [yamada, sato],
+    users,
     leadSourceCatalog: defaultLeadSourceCatalog(),
     activityTypeCatalog: defaultActivityTypeCatalog(),
     sessionUserId: yamada.id,
-    dataViewUserIds: [yamada.id],
+    dataViewUserIds: 'all',
     activities,
     invoices,
     chartColors: mergeChartColors(undefined),
@@ -499,6 +559,13 @@ export function sampleState(): AppState {
         completedAt: isoDaysAgo(2),
       },
     ],
+    attendanceRecords,
+    attendanceOvertimeRequests,
+    attendanceAdminUserIds: [yamada.id, kunieda.id],
+    attendanceCorrectionPasswordHash:
+      '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
+    attendanceApprovalPasswordHash:
+      '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918',
   }
 }
 

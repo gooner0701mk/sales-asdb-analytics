@@ -480,6 +480,45 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   anchorFiscalTermNumber: 1,
 }
 
+export type AttendanceOvertimeStatus = 'none' | 'pending' | 'approved' | 'rejected'
+
+/** 事前の残業申請（予定時間・理由。承認は退勤とは別） */
+export type AttendanceOvertimeRequest = {
+  id: string
+  appUserId: string
+  workDate: string
+  /** 予定残業時間（1時間単位・整数） */
+  plannedHours: number
+  reason: string
+  status: 'pending' | 'approved' | 'rejected'
+  requestedAt: string
+  approvedAt: string | null
+  approvedByLabel: string | null
+}
+
+/** 1日1行の勤怠（出勤・退勤＋GPS） */
+export type AttendanceDayRecord = {
+  id: string
+  appUserId: string
+  /** 勤務日（ローカル暦 YYYY-MM-DD） */
+  workDate: string
+  clockInAt: string
+  clockOutAt: string | null
+  clockInLat: number
+  clockInLng: number
+  clockOutLat: number | null
+  clockOutLng: number | null
+  overtimeStatus: AttendanceOvertimeStatus
+  approvedAt: string | null
+  /** 承認した管理者の表示名 */
+  approvedByLabel: string | null
+  /** @deprecated 事前申請（attendanceOvertimeRequests）を使用 */
+  overtimeReason: string | null
+  /** 紐づく事前残業申請 id */
+  overtimeRequestId: string | null
+  note: string | null
+}
+
 export type AppState = {
   version: 8
   users: User[]
@@ -510,6 +549,16 @@ export type AppState = {
   chartColors: ChartColorPalette
   /** 見積書提出タスク */
   estimateTasks: EstimateTask[]
+  /** 勤怠（会社共有。クラウド同期の対象） */
+  attendanceRecords: AttendanceDayRecord[]
+  /** 事前残業申請 */
+  attendanceOvertimeRequests: AttendanceOvertimeRequest[]
+  /** 残業承認などができる担当者（AppState.users の id） */
+  attendanceAdminUserIds: string[]
+  /** 打刻修正画面用パスワード（SHA-256 16進。空なら未設定） */
+  attendanceCorrectionPasswordHash: string
+  /** 残業承認・却下用パスワード（SHA-256 16進。空なら未設定） */
+  attendanceApprovalPasswordHash: string
 }
 
 export function newUser(name: string): User {
@@ -538,5 +587,10 @@ export function emptyState(): AppState {
     invoiceAnnualRevenueTargets: {},
     chartColors: { ...DEFAULT_CHART_COLORS },
     estimateTasks: [],
+    attendanceRecords: [],
+    attendanceOvertimeRequests: [],
+    attendanceAdminUserIds: [],
+    attendanceCorrectionPasswordHash: '',
+    attendanceApprovalPasswordHash: '',
   }
 }

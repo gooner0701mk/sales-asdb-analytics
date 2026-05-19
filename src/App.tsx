@@ -9,6 +9,7 @@ import {
 import { EstimateTasksTab } from './EstimateTasksTab'
 import { InvoicesTab } from './InvoicesTab'
 import { SettingsTab } from './SettingsTab'
+import { AttendanceTab } from './AttendanceTab'
 import { TargetsTab } from './TargetsTab'
 import {
   Bar,
@@ -306,6 +307,9 @@ function DashboardApp({
     estimateTasks,
     leadSourceCatalog,
     activityTypeCatalog,
+    attendanceRecords,
+    attendanceAdminUserIds,
+    attendanceCorrectionPasswordHash,
   } = state
 
   const fiscalSm = companySettings.fiscalYearStartMonth
@@ -313,7 +317,13 @@ function DashboardApp({
   const milestoneUserId = dataViewSingleUserId(dataViewUserIds)
   const showMilestones = milestoneUserId !== null
 
-  type PageTab = 'dashboard' | 'targets' | 'invoices' | 'estimates' | 'settings'
+  type PageTab =
+    | 'dashboard'
+    | 'targets'
+    | 'invoices'
+    | 'estimates'
+    | 'attendance'
+    | 'settings'
   const [pageTab, setPageTab] = useState<PageTab>('dashboard')
   const narrowLayout = useMediaQuery('(max-width: 960px)')
 
@@ -325,7 +335,9 @@ function DashboardApp({
           ? '売上データ（請求ベース）｜営業データ分析'
           : pageTab === 'estimates'
             ? '見積もりタスク｜営業データ分析'
-            : pageTab === 'settings'
+            : pageTab === 'attendance'
+              ? '勤怠｜営業データ分析'
+              : pageTab === 'settings'
               ? '設定｜営業データ分析'
               : '営業データ分析'
   }, [pageTab])
@@ -1248,6 +1260,15 @@ function DashboardApp({
             onClick={() => setPageTab('estimates')}
           >
             見積もりタスク
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={pageTab === 'attendance'}
+            className={`app-tab ${pageTab === 'attendance' ? 'active' : ''}`}
+            onClick={() => setPageTab('attendance')}
+          >
+            勤怠
           </button>
         </nav>
         <button
@@ -2342,12 +2363,23 @@ function DashboardApp({
           showToast={showToast}
           companySettings={companySettings}
         />
+      ) : pageTab === 'attendance' ? (
+        <AttendanceTab
+          users={users}
+          sessionUserId={sessionUserId}
+          attendanceRecords={attendanceRecords}
+          attendanceCorrectionPasswordHash={attendanceCorrectionPasswordHash}
+          setState={setState}
+          showToast={showToast}
+        />
       ) : (
         <SettingsTab
           users={users}
           companySettings={companySettings}
           leadSourceCatalog={leadSourceCatalog}
           activityTypeCatalog={activityTypeCatalog}
+          attendanceAdminUserIds={attendanceAdminUserIds}
+          attendanceCorrectionPasswordHash={attendanceCorrectionPasswordHash}
           setState={setState}
           showToast={showToast}
         />

@@ -37,6 +37,7 @@ import {
   payPeriodLabel,
   shiftPayPeriodEndYm,
 } from './attendance/payPeriod'
+import { resolveTodayWorkStatus } from './attendance/todayStatus'
 import { createId } from './createId'
 import { formatDateJa, todayIsoDate } from './dates'
 import { useMediaQuery } from './useMediaQuery'
@@ -216,6 +217,20 @@ export function AttendanceTab({
       users.map((u) => summarizeUserWeek(attendanceRecords, u.id, weekStart)),
     [users, attendanceRecords, weekStart],
   )
+
+  const teamTodayRows = useMemo(() => {
+    const rows = users.map((u) => {
+      const status = resolveTodayWorkStatus(attendanceRecords, u.id, today)
+      return { user: u, status }
+    })
+    const rank = (s: (typeof rows)[0]['status']) =>
+      s.kind === 'in' ? 0 : s.kind === 'out' ? 1 : 2
+    return [...rows].sort((a, b) => {
+      const d = rank(a.status) - rank(b.status)
+      if (d !== 0) return d
+      return a.user.name.localeCompare(b.user.name, 'ja')
+    })
+  }, [users, attendanceRecords, today])
 
   const punchIn = useCallback(async () => {
     if (!punchUserId) {
@@ -518,6 +533,57 @@ export function AttendanceTab({
           >
             {gpsBusy ? t.gpsBusy : t.btnOut}
           </button>
+        </div>
+        <div className="attendance-team-today-wrap">
+          <h3 className="attendance-team-today-heading">{t.teamTodayHeading}</h3>
+          <div className="attendance-team-today-scroll">
+            <table className="attendance-team-today-table">
+              <thead>
+                <tr>
+                  <th>{t.teamTodayThName}</th>
+                  <th>{t.teamTodayThStatus}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamTodayRows.map(({ user, status }) => {
+                  if (status.kind === 'in') {
+                    return (
+                      <tr key={user.id}>
+                        <td>{user.name}</td>
+                        <td>
+                          <span className="attendance-team-status attendance-team-status-in">
+                            {t.teamTodayStatusIn}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  }
+                  if (status.kind === 'out') {
+                    return (
+                      <tr key={user.id}>
+                        <td>{user.name}</td>
+                        <td>
+                          <span className="attendance-team-status attendance-team-status-out">
+                            {t.teamTodayStatusOut}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  }
+                  return (
+                    <tr key={user.id}>
+                      <td>{user.name}</td>
+                      <td>
+                        <span className="attendance-team-status attendance-team-status-none">
+                          {t.teamTodayStatusNone}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
         <div className="attendance-extra-launch">
           {punchUserId ? (

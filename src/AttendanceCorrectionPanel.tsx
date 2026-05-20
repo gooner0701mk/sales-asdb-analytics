@@ -138,6 +138,20 @@ export function AttendanceCorrectionPanel({
     showToast(t.correctionSaved)
   }
 
+  const deleteRecord = (r: AttendanceDayRecord) => {
+    if (!window.confirm(t.correctionDeleteConfirm)) return
+    setState((prev) => ({
+      ...prev,
+      attendanceRecords: prev.attendanceRecords.filter((row) => row.id !== r.id),
+    }))
+    setDrafts((prev) => {
+      const copy = { ...prev }
+      delete copy[r.id]
+      return copy
+    })
+    showToast(t.correctionDeleted)
+  }
+
   const addRecord = () => {
     if (!addUserId) {
       showToast(t.correctionAddNeedUser)
@@ -338,13 +352,22 @@ export function AttendanceCorrectionPanel({
                     />
                   </label>
                 </div>
-                <button
-                  type="button"
-                  className="btn primary small"
-                  onClick={() => saveRecord(r)}
-                >
-                  {t.correctionSave}
-                </button>
+                <div className="attendance-correction-item-actions">
+                  <button
+                    type="button"
+                    className="btn primary small"
+                    onClick={() => saveRecord(r)}
+                  >
+                    {t.correctionSave}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn danger ghost small"
+                    onClick={() => deleteRecord(r)}
+                  >
+                    {t.correctionDelete}
+                  </button>
+                </div>
               </li>
             )
           })}

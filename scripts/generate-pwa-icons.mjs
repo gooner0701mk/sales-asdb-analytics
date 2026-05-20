@@ -1,6 +1,6 @@
 /**
  * PWA / ホーム画面用 PNG を生成する。
- * 独自画像に差し替えるときは public/icons/source.png（1024×1024 推奨）を置いて実行。
+ * 独自画像: public/icons/source.png（正方形推奨・1024px以上）を置いて npm run icons
  */
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -11,7 +11,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const iconsDir = join(root, 'public', 'icons')
 const sourcePng = join(iconsDir, 'source.png')
 const sourceSvg = join(iconsDir, 'app-icon.svg')
-const input = existsSync(sourcePng) ? sourcePng : sourceSvg
+const useCustomLogo = existsSync(sourcePng)
+const input = useCustomLogo ? sourcePng : sourceSvg
+
+const logoBg = { r: 255, g: 255, b: 255, alpha: 1 }
+const defaultBg = { r: 37, g: 99, b: 235, alpha: 1 }
 
 const outputs = [
   { file: 'apple-touch-icon.png', size: 180 },
@@ -20,25 +24,25 @@ const outputs = [
   { file: 'icon-512-maskable.png', size: 512, maskable: true },
 ]
 
+async function squareIcon(size, { maskable = false } = {}) {
+  const bg = useCustomLogo ? logoBg : defaultBg
+  const pad = maskable ? Math.round(size * 0.12) : useCustomLogo ? Math.round(size * 0.06) : 0
+  const inner = size - pad * 2
+  const fit = useCustomLogo ? 'contain' : 'cover'
+
+  const innerBuf = await sharp(input)
+    .resize(inner, inner, { fit, background: bg })
+    .png()
+    .toBuffer()
+
+  return sharp({
+    create: { width: size, height: size, channels: 4, background: bg },
+  }).composite([{ input: innerBuf, left: pad, top: pad }])
+}
+
 async function main() {
   for (const { file, size, maskable } of outputs) {
-    let img = sharp(input).resize(size, size, { fit: 'cover' })
-    if (maskable) {
-      const pad = Math.round(size * 0.1)
-      const inner = size - pad * 2
-      const innerBuf = await sharp(input)
-        .resize(inner, inner, { fit: 'cover' })
-        .png()
-        .toBuffer()
-      img = sharp({
-        create: {
-          width: size,
-          height: size,
-          channels: 4,
-          background: { r: 37, g: 99, b: 235, alpha: 1 },
-        },
-      }).composite([{ input: innerBuf, left: pad, top: pad }])
-    }
+    const img = await squareIcon(size, { maskable })
     await img.png().toFile(join(iconsDir, file))
     console.log(`wrote ${file} (${size}px)`)
   }

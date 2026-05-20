@@ -1938,3 +1938,239 @@
   margin-top: 0.25rem;
 }
 
+/* --- Home menu --- */
+.home-page {
+  margin-bottom: 2rem;
+}
+
+.home-greeting {
+  margin: 0 0 1.5rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.home-section {
+  margin-bottom: 1.75rem;
+}
+
+.home-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.home-section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.home-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.home-grid-sales {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.home-grid-single {
+  grid-template-columns: minmax(220px, 360px);
+}
+
+.home-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    transform 0.1s;
+}
+
+.home-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.home-card-large {
+  min-height: 4.5rem;
+}
+
+.home-card-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.home-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.home-card-label {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.home-card-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* --- Page back bar --- */
+.page-back-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.page-back-btn {
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.page-back-btn:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.page-back-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* --- Sales sub navigation --- */
+.sales-sub-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.sales-sub-nav-btn {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.sales-sub-nav-btn:hover {
+  color: var(--text-strong);
+}
+
+.sales-sub-nav-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* --- Confirm dialog --- */
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: color-mix(in srgb, #0f172a 45%, transparent);
+}
+
+.confirm-dialog {
+  width: min(420px, 100%);
+  margin: 0;
+}
+
+.confirm-dialog-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.confirm-dialog-message {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* --- Settings maintenance --- */
+.settings-maintenance-panel {
+  margin-top: 1.5rem;
+  border-color: color-mix(in srgb, var(--danger, #dc2626) 25%, var(--border));
+}
+
+.settings-maintenance-unlock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.settings-maintenance-unlock .field {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+}
+
+.settings-maintenance-unlocked-note {
+  margin: 0 0 0.75rem;
+  color: var(--accent);
+}
+
+.settings-maintenance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+

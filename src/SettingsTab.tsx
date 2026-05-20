@@ -5,7 +5,8 @@ import {
   fyStartYearFromCalendarYm,
 } from './fiscalYear'
 import { attendanceLabels as attendanceT } from './attendance/labels'
-import { hashAttendancePassword } from './attendance/password'
+import { hashAttendancePassword, verifyAttendancePassword } from './attendance/password'
+import { ConfirmActionDialog } from './ConfirmActionDialog'
 import { todayIsoDate } from './dates'
 import { createId } from './createId'
 import {
@@ -79,6 +80,8 @@ type Props = {
   attendanceCorrectionPasswordHash: string
   setState: Dispatch<SetStateAction<AppState>>
   showToast: (msg: string) => void
+  onResetSample: () => void
+  onClearAll: () => void
 }
 
 export function SettingsTab({
@@ -90,6 +93,8 @@ export function SettingsTab({
   attendanceCorrectionPasswordHash,
   setState,
   showToast,
+  onResetSample,
+  onClearAll,
 }: Props) {
   const [draftCompany, setDraftCompany] = useState(companySettings)
   const [userNameDraft, setUserNameDraft] = useState<Record<string, string>>(() =>
@@ -108,6 +113,11 @@ export function SettingsTab({
   )
   const [correctionPw, setCorrectionPw] = useState('')
   const [correctionPwConfirm, setCorrectionPwConfirm] = useState('')
+  const [maintenancePw, setMaintenancePw] = useState('')
+  const [maintenanceUnlocked, setMaintenanceUnlocked] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<'sample' | 'clear' | null>(
+    null,
+  )
 
   useEffect(() => {
     setActivityDraft(activityTypeCatalog.map((x) => ({ ...x })))
@@ -705,7 +715,7 @@ export function SettingsTab({
         <h2 className="targets-heading">ユーザー設定</h2>
         <p className="hint small">
           <strong>営業・売上に含める</strong>をオフにしたユーザーは勤怠・給与のみで、活動記録・請求・分析の担当一覧には出ません。
-          営業担当の追加・削除は「分析・活動記録」タブ上部から行えます。
+          営業担当の追加・削除は「営業 › 活動記録・分析」画面から行えます。
         </p>
         <table className="targets-table settings-user-table">
           <thead>
@@ -774,6 +784,112 @@ export function SettingsTab({
           </div>
         </div>
       </section>
+
+      <section className="panel settings-maintenance-panel">
+        <h2 className="targets-heading">データの初期化（管理者）</h2>
+        <p className="hint small">
+          サンプル再読込・全消去は<strong>打刻修正と同じパスワード</strong>で解除できます。実行前に必ず確認ダイアログが出ます。
+        </p>
+        {!maintenanceUnlocked ? (
+          <div className="settings-maintenance-unlock">
+            <label className="field">
+              <span className="field-label">パスワード</span>
+              <input
+                type="password"
+                className="cell-input"
+                value={maintenancePw}
+                autoComplete="current-password"
+                onChange={(e) => setMaintenancePw(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void (async () => {
+                      const ok = await verifyAttendancePassword(
+                        maintenancePw,
+                        attendanceCorrectionPasswordHash,
+                      )
+                      if (!ok) {
+                        showToast('パスワードが違います')
+                        return
+                      }
+                      setMaintenanceUnlocked(true)
+                      setMaintenancePw('')
+                      showToast('操作を解除しました')
+                    })()
+                  }
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                void (async () => {
+                  const ok = await verifyAttendancePassword(
+                    maintenancePw,
+                    attendanceCorrectionPasswordHash,
+                  )
+                  if (!ok) {
+                    showToast('パスワードが違います')
+                    return
+                  }
+                  setMaintenanceUnlocked(true)
+                  setMaintenancePw('')
+                  showToast('操作を解除しました')
+                })()
+              }}
+            >
+              パスワードを確認
+            </button>
+          </div>
+        ) : (
+          <p className="hint small settings-maintenance-unlocked-note">
+            解除済みです（この設定画面を開いている間のみ有効）
+          </p>
+        )}
+        <div className="settings-maintenance-actions">
+          <button
+            type="button"
+            className="btn ghost"
+            disabled={!maintenanceUnlocked}
+            onClick={() => setConfirmAction('sample')}
+          >
+            サンプル再読込
+          </button>
+          <button
+            type="button"
+            className="btn danger ghost"
+            disabled={!maintenanceUnlocked}
+            onClick={() => setConfirmAction('clear')}
+          >
+            全消去
+          </button>
+        </div>
+      </section>
+
+      <ConfirmActionDialog
+        open={confirmAction === 'sample'}
+        title="サンプルデータを読み込みますか？"
+        message="現在のデータはサンプル内容で上書きされます。この操作は元に戻せません。"
+        confirmLabel="サンプルを読み込む"
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={() => {
+          setConfirmAction(null)
+          onResetSample()
+        }}
+      />
+      <ConfirmActionDialog
+        open={confirmAction === 'clear'}
+        title="すべてのデータを消去しますか？"
+        message="活動・請求・勤怠・設定を含む保存データがすべて削除されます。この操作は元に戻せません。"
+        confirmLabel="全消去する"
+        danger
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={() => {
+          setConfirmAction(null)
+          onClearAll()
+        }}
+      />
     </div>
   )
 }

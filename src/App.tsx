@@ -11,6 +11,15 @@ import { InvoicesTab } from './InvoicesTab'
 import { SettingsTab } from './SettingsTab'
 import { AttendanceTab } from './AttendanceTab'
 import { TargetsTab } from './TargetsTab'
+import { HomePage } from './HomePage'
+import { PageBackBar } from './PageBackBar'
+import { SalesSubNav } from './SalesSubNav'
+import {
+  isSalesPageTab,
+  pageBackTitle,
+  pageDocumentTitle,
+  type PageTab,
+} from './navigation/pageTabs'
 import {
   Bar,
   BarChart,
@@ -131,27 +140,6 @@ function clampDashboardYm(value: string, maxYm: string): string {
   if (value < MIN_FOCUS_MONTH_YM) return MIN_FOCUS_MONTH_YM
   if (value > maxYm) return maxYm
   return value
-}
-
-function SettingsGearIcon() {
-  return (
-    <svg
-      className="app-tab-gear-icon"
-      xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  )
 }
 
 type CloudSavePhase = 'idle' | 'syncing' | 'ok' | 'error'
@@ -320,29 +308,11 @@ function DashboardApp({
   const milestoneUserId = dataViewSingleUserId(dataViewUserIds)
   const showMilestones = milestoneUserId !== null
 
-  type PageTab =
-    | 'dashboard'
-    | 'targets'
-    | 'invoices'
-    | 'estimates'
-    | 'attendance'
-    | 'settings'
-  const [pageTab, setPageTab] = useState<PageTab>('dashboard')
+  const [pageTab, setPageTab] = useState<PageTab>('home')
   const narrowLayout = useMediaQuery('(max-width: 960px)')
 
   useEffect(() => {
-    document.title =
-      pageTab === 'targets'
-        ? 'アプローチ先企業一覧｜営業データ分析'
-        : pageTab === 'invoices'
-          ? '売上データ（請求ベース）｜営業データ分析'
-          : pageTab === 'estimates'
-            ? '見積もりタスク｜営業データ分析'
-            : pageTab === 'attendance'
-              ? '勤怠｜営業データ分析'
-              : pageTab === 'settings'
-              ? '設定｜営業データ分析'
-              : '営業データ分析'
+    document.title = pageDocumentTitle(pageTab)
   }, [pageTab])
 
   useEffect(() => {
@@ -1094,7 +1064,6 @@ function DashboardApp({
   }
 
   const onClearAll = () => {
-    if (!window.confirm('保存データを消去しますか？')) return
     clearStorage()
     setState(emptyState())
     showToast('データをリセットしました')
@@ -1133,8 +1102,15 @@ function DashboardApp({
             営業データ分析
           </h1>
           <p className="subtitle">
-            <strong>データ表示</strong>のプルダウンで、チェックを付けた担当の活動・集計だけを表示します（
-            <strong>複数人</strong>や<strong>自分以外だけ</strong>も可能）。<strong>全員</strong>ですべてをまとめて見られます。活動の追加は常に「記録する担当」に紐づきます。
+            {pageTab === 'home' ? (
+              <>メニューから各機能を開けます。データの書き出し・取込は上部のボタンから行えます。</>
+            ) : (
+              <>
+                <strong>データ表示</strong>のプルダウンで、チェックを付けた担当の活動・集計だけを表示します（
+                <strong>複数人</strong>や<strong>自分以外だけ</strong>も可能）。<strong>全員</strong>
+                ですべてをまとめて見られます。活動の追加は常に「記録する担当」に紐づきます。
+              </>
+            )}
           </p>
         </div>
         <div className="toolbar">
@@ -1172,12 +1148,6 @@ function DashboardApp({
             hidden
             onChange={onImportJson}
           />
-          <button type="button" className="btn ghost" onClick={onResetSample}>
-            サンプル再読込
-          </button>
-          <button type="button" className="btn danger ghost" onClick={onClearAll}>
-            全消去
-          </button>
           {auth.configured ? (
             <>
               <span
@@ -1222,72 +1192,22 @@ function DashboardApp({
         </div>
       </header>
 
-      <div className="app-nav-bar">
-        <nav
-          className="app-tabs app-tabs-main"
-          role="tablist"
-          aria-label="画面の切替"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={pageTab === 'dashboard'}
-            className={`app-tab ${pageTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setPageTab('dashboard')}
-          >
-            分析・活動記録
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={pageTab === 'targets'}
-            className={`app-tab ${pageTab === 'targets' ? 'active' : ''}`}
-            onClick={() => setPageTab('targets')}
-          >
-            アプローチ先企業一覧
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={pageTab === 'invoices'}
-            className={`app-tab ${pageTab === 'invoices' ? 'active' : ''}`}
-            onClick={() => setPageTab('invoices')}
-          >
-            売上データ（請求ベース）
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={pageTab === 'estimates'}
-            className={`app-tab ${pageTab === 'estimates' ? 'active' : ''}`}
-            onClick={() => setPageTab('estimates')}
-          >
-            見積もりタスク
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={pageTab === 'attendance'}
-            className={`app-tab ${pageTab === 'attendance' ? 'active' : ''}`}
-            onClick={() => setPageTab('attendance')}
-          >
-            勤怠
-          </button>
-        </nav>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pageTab === 'settings'}
-          className={`app-tab app-tab-gear ${pageTab === 'settings' ? 'active' : ''}`}
-          aria-label="設定"
-          title="設定"
-          onClick={() => setPageTab('settings')}
-        >
-          <SettingsGearIcon />
-        </button>
-      </div>
-
       {toast && <div className="toast" role="status">{toast}</div>}
+
+      {pageTab === 'home' ? (
+        <HomePage
+          companyName={companySettings.companyName}
+          onNavigate={setPageTab}
+        />
+      ) : (
+        <>
+          <PageBackBar
+            title={pageBackTitle(pageTab)}
+            onBack={() => setPageTab('home')}
+          />
+          {isSalesPageTab(pageTab) ? (
+            <SalesSubNav active={pageTab} onSelect={setPageTab} />
+          ) : null}
 
       {pageTab === 'dashboard' ? (
         <>
@@ -2375,7 +2295,7 @@ function DashboardApp({
           setState={setState}
           showToast={showToast}
         />
-      ) : (
+      ) : pageTab === 'settings' ? (
         <SettingsTab
           users={users}
           companySettings={companySettings}
@@ -2385,7 +2305,11 @@ function DashboardApp({
           attendanceCorrectionPasswordHash={attendanceCorrectionPasswordHash}
           setState={setState}
           showToast={showToast}
+          onResetSample={onResetSample}
+          onClearAll={onClearAll}
         />
+      ) : null}
+        </>
       )}
     </div>
   )

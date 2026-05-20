@@ -286,6 +286,8 @@ export function parseLeadSourceIdForImport(
 export type User = {
   id: string
   name: string
+  /** false のとき勤怠・給与のみ（活動・売上・分析の担当一覧から除外） */
+  includeInSalesAnalytics?: boolean
 }
 
 export type UserMilestones = {

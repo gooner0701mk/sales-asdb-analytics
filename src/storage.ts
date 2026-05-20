@@ -18,6 +18,7 @@ import {
   parseAttendanceRecords,
 } from './attendance/normalize'
 import { parseOvertimeRequests } from './attendance/overtimeRequests'
+import { normalizeUsers, usersForSalesAnalytics } from './userRoles'
 import { sampleAttendanceRecords } from './attendance/sampleRecords'
 import { sampleOvertimeRequests } from './attendance/sampleOvertimeRequests'
 import {
@@ -181,33 +182,35 @@ function normalizeDataViewUserIds(
   users: User[],
   sessionUserId: string | null,
 ): DataViewUserIds {
+  const salesUsers = usersForSalesAnalytics(users)
+  const salesIdSet = new Set(salesUsers.map((u) => u.id))
   const multi = o.dataViewUserIds
   if (multi === 'all') return 'all'
   if (Array.isArray(multi)) {
     const ids = multi.filter(
-      (x): x is string => typeof x === 'string' && users.some((u) => u.id === x),
+      (x): x is string => typeof x === 'string' && salesIdSet.has(x),
     )
-    if (users.length > 0 && ids.length >= users.length) return 'all'
+    if (salesUsers.length > 0 && ids.length >= salesUsers.length) return 'all'
     if (ids.length > 0) return ids
     if (multi.length === 0) return []
   }
   const single = o.dataViewUserId
   if (single === 'all') return 'all'
-  if (typeof single === 'string' && users.some((u) => u.id === single)) return [single]
+  if (typeof single === 'string' && salesIdSet.has(single)) return [single]
   const vs = o.viewScope
   if (vs === 'all') return 'all'
   if (
     typeof sessionUserId === 'string' &&
-    users.some((u) => u.id === sessionUserId)
+    salesIdSet.has(sessionUserId)
   ) {
     return [sessionUserId]
   }
-  return users[0]?.id ? [users[0].id] : 'all'
+  return salesUsers[0]?.id ? [salesUsers[0].id] : 'all'
 }
 
 /** v5 以降の生 JSON を正規化（常に v8） */
 export function normalizeStoredStateRecord(o: Record<string, unknown>): AppState {
-  const users = (o.users as User[]) ?? []
+  const users = normalizeUsers(o.users)
   const sessionUserId =
     typeof o.sessionUserId === 'string' || o.sessionUserId === null
       ? (o.sessionUserId as string | null)

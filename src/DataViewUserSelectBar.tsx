@@ -45,7 +45,7 @@ export function DataViewUserSelectBar({
   const setAllMode = (all: boolean) => {
     setState((prev) => ({
       ...prev,
-      dataViewUserIds: all ? 'all' : prev.users.map((u) => u.id),
+      dataViewUserIds: all ? 'all' : users.map((u) => u.id),
     }))
   }
 
@@ -57,7 +57,7 @@ export function DataViewUserSelectBar({
       if (set.has(userId)) set.delete(userId)
       else set.add(userId)
       const next = [...set]
-      if (prev.users.length > 0 && next.length >= prev.users.length) {
+      if (users.length > 0 && next.length >= users.length) {
         return { ...prev, dataViewUserIds: 'all' }
       }
       return { ...prev, dataViewUserIds: next }

@@ -8,6 +8,11 @@ import { attendanceLabels as attendanceT } from './attendance/labels'
 import { hashAttendancePassword } from './attendance/password'
 import { todayIsoDate } from './dates'
 import { createId } from './createId'
+import {
+  includeUserInSalesAnalytics,
+  newAttendanceOnlyUser,
+  usersForSalesAnalytics,
+} from './userRoles'
 import type {
   ActivityAnalysisRole,
   ActivityTypeCatalogItem,
@@ -90,6 +95,10 @@ export function SettingsTab({
   const [userNameDraft, setUserNameDraft] = useState<Record<string, string>>(() =>
     Object.fromEntries(users.map((u) => [u.id, u.name])),
   )
+  const [salesIncludeDraft, setSalesIncludeDraft] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(users.map((u) => [u.id, includeUserInSalesAnalytics(u)])),
+  )
+  const [attendanceOnlyName, setAttendanceOnlyName] = useState('')
   const [leadDraft, setLeadDraft] = useState<SelectOptionItem[]>(leadSourceCatalog)
   const [activityDraft, setActivityDraft] = useState<ActivityTypeCatalogItem[]>(
     () => activityTypeCatalog.map((x) => ({ ...x })),
@@ -113,6 +122,16 @@ export function SettingsTab({
       const next = { ...prev }
       for (const u of users) {
         if (next[u.id] === undefined) next[u.id] = u.name
+      }
+      for (const id of Object.keys(next)) {
+        if (!users.some((u) => u.id === id)) delete next[id]
+      }
+      return next
+    })
+    setSalesIncludeDraft((prev) => {
+      const next = { ...prev }
+      for (const u of users) {
+        if (next[u.id] === undefined) next[u.id] = includeUserInSalesAnalytics(u)
       }
       for (const id of Object.keys(next)) {
         if (!users.some((u) => u.id === id)) delete next[id]
@@ -152,16 +171,47 @@ export function SettingsTab({
     showToast('会社設定を保存しました')
   }, [draftCompany, setState, showToast])
 
-  const saveUserNames = useCallback(() => {
+  const addAttendanceOnlyUser = useCallback(() => {
+    const name = attendanceOnlyName.trim()
+    if (!name) {
+      showToast('表示名を入力してください')
+      return
+    }
+    const u = newAttendanceOnlyUser(name)
     setState((prev) => ({
       ...prev,
-      users: prev.users.map((u) => ({
-        ...u,
-        name: (userNameDraft[u.id] ?? u.name).trim() || '無名',
-      })),
+      users: [...prev.users, u],
     }))
-    showToast('ユーザー名を更新しました')
-  }, [userNameDraft, setState, showToast])
+    setAttendanceOnlyName('')
+    showToast(`勤怠専用ユーザーを追加しました：${u.name}`)
+  }, [attendanceOnlyName, setState, showToast])
+
+  const saveUserSettings = useCallback(() => {
+    setState((prev) => {
+      const nextUsers = prev.users.map((u) => {
+        const include = salesIncludeDraft[u.id] !== false
+        return {
+          ...u,
+          name: (userNameDraft[u.id] ?? u.name).trim() || '無名',
+          includeInSalesAnalytics: include ? true : false,
+        }
+      })
+      const salesIds = new Set(usersForSalesAnalytics(nextUsers).map((x) => x.id))
+      let nextDataView = prev.dataViewUserIds
+      if (nextDataView !== 'all') {
+        const filtered = nextDataView.filter((id) => salesIds.has(id))
+        if (filtered.length === 0) nextDataView = 'all'
+        else if (filtered.length >= salesIds.size) nextDataView = 'all'
+        else nextDataView = filtered
+      }
+      return {
+        ...prev,
+        users: nextUsers,
+        dataViewUserIds: nextDataView,
+      }
+    })
+    showToast('ユーザー設定を保存しました')
+  }, [userNameDraft, salesIncludeDraft, setState, showToast])
 
   const saveLeadCatalog = useCallback(() => {
     const byDraft = new Map<string, SelectOptionItem>()
@@ -654,12 +704,14 @@ export function SettingsTab({
       <section className="panel settings-users-panel">
         <h2 className="targets-heading">ユーザー設定</h2>
         <p className="hint small">
-          表示名の変更はここで行います。ユーザーの<strong>追加・削除</strong>は「分析・活動記録」タブ上部から行えます。
+          <strong>営業・売上に含める</strong>をオフにしたユーザーは勤怠・給与のみで、活動記録・請求・分析の担当一覧には出ません。
+          営業担当の追加・削除は「分析・活動記録」タブ上部から行えます。
         </p>
         <table className="targets-table settings-user-table">
           <thead>
             <tr>
               <th>表示名</th>
+              <th>営業・売上に含める</th>
             </tr>
           </thead>
           <tbody>
@@ -677,14 +729,50 @@ export function SettingsTab({
                       }))
                     }
                   />
+                  {!includeUserInSalesAnalytics(u) && (
+                    <span className="hint small settings-user-badge">勤怠専用</span>
+                  )}
+                </td>
+                <td className="settings-user-check-cell">
+                  <label className="settings-user-check">
+                    <input
+                      type="checkbox"
+                      checked={salesIncludeDraft[u.id] !== false}
+                      onChange={(e) =>
+                        setSalesIncludeDraft((prev) => ({
+                          ...prev,
+                          [u.id]: e.target.checked,
+                        }))
+                      }
+                    />
+                    含める
+                  </label>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <button type="button" className="btn primary" onClick={saveUserNames}>
-          ユーザー名を保存
+        <button type="button" className="btn primary" onClick={saveUserSettings}>
+          ユーザー設定を保存
         </button>
+        <div className="settings-attendance-only-add">
+          <h3 className="settings-subheading">勤怠専用ユーザーを追加</h3>
+          <p className="hint small">
+            事務・製造など営業分析に載せたくない社員を、勤怠・給与Excel用だけに登録します。
+          </p>
+          <div className="user-bar-row add-user-row">
+            <input
+              type="text"
+              className="cell-input grow"
+              value={attendanceOnlyName}
+              onChange={(e) => setAttendanceOnlyName(e.target.value)}
+              placeholder="表示名（例：山田 太郎）"
+            />
+            <button type="button" className="btn" onClick={addAttendanceOnlyUser}>
+              勤怠専用で追加
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   )

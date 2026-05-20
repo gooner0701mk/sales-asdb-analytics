@@ -86,6 +86,7 @@ import { useAuth } from './auth/AuthContext'
 import { CloudLoginScreen } from './auth/CloudLoginScreen'
 import { dataViewShowsOwnerColumn, dataViewSingleUserId, dataViewSummaryLabel } from './dataViewSelection'
 import { DataViewUserSelectBar } from './DataViewUserSelectBar'
+import { usersForSalesAnalytics } from './userRoles'
 import type {
   ActivityLog,
   ActivityType,
@@ -311,6 +312,8 @@ function DashboardApp({
     attendanceAdminUserIds,
     attendanceCorrectionPasswordHash,
   } = state
+
+  const salesUsers = useMemo(() => usersForSalesAnalytics(users), [users])
 
   const fiscalSm = companySettings.fiscalYearStartMonth
 
@@ -600,7 +603,7 @@ function DashboardApp({
   const userPeriodTotals = useMemo(
     () =>
       buildUserPeriodTotals(
-        users,
+        salesUsers,
         activities,
         activityTypeIds,
         periodGroup,
@@ -610,7 +613,7 @@ function DashboardApp({
         dashboardFiscalFocusStartYear,
       ),
     [
-      users,
+      salesUsers,
       activities,
       activityTypeIds,
       periodGroup,
@@ -636,7 +639,7 @@ function DashboardApp({
   const userCompareLeadStack = useMemo(
     () =>
       buildLeadSourceStackRows(
-        users,
+        salesUsers,
         activities,
         leadSourceCatalog,
         periodGroup,
@@ -646,7 +649,7 @@ function DashboardApp({
         dashboardFiscalFocusStartYear,
       ),
     [
-      users,
+      salesUsers,
       activities,
       leadSourceCatalog,
       periodGroup,
@@ -863,8 +866,8 @@ function DashboardApp({
   )
 
   const sessionUser = useMemo(
-    () => users.find((u) => u.id === sessionUserId) ?? null,
-    [users, sessionUserId],
+    () => salesUsers.find((u) => u.id === sessionUserId) ?? null,
+    [salesUsers, sessionUserId],
   )
 
   const sortedActivities = useMemo(() => {
@@ -1037,7 +1040,7 @@ function DashboardApp({
     showToast('JSON（全状態）をダウンロードしました')
   }
 
-  const defaultCsvUserId = sessionUserId ?? users[0]?.id ?? ''
+  const defaultCsvUserId = sessionUserId ?? salesUsers[0]?.id ?? ''
 
   const onImportCsv: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const file = e.target.files?.[0]
@@ -1302,7 +1305,7 @@ function DashboardApp({
                 }))
               }
             >
-              {users.map((u) => (
+              {salesUsers.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
                 </option>
@@ -1312,7 +1315,7 @@ function DashboardApp({
         </div>
         <div className="user-bar-row">
           <DataViewUserSelectBar
-            users={users}
+            users={salesUsers}
             dataViewUserIds={dataViewUserIds}
             setState={setState}
             showHint={false}
@@ -1329,7 +1332,7 @@ function DashboardApp({
           <button type="button" className="btn primary" onClick={addUserHandler}>
             ユーザーを追加
           </button>
-          {sessionUserId && users.length > 1 && (
+          {sessionUserId && salesUsers.length > 1 && (
             <button
               type="button"
               className="btn danger ghost"
@@ -1459,7 +1462,7 @@ function DashboardApp({
 
           <div className="panel activity-log">
             <h2 className="side-title">
-              活動一覧（{dataViewSummaryLabel(dataViewUserIds, users)}）
+              活動一覧（{dataViewSummaryLabel(dataViewUserIds, salesUsers)}）
             </h2>
             <p className="hint small">
               {visibleActivities.length === 0
@@ -2208,7 +2211,7 @@ function DashboardApp({
             <h2 className="user-compare-title">ユーザー別比較</h2>
             <p className="hint small user-compare-desc">
               {cardScopeLabel}
-              で各ユーザーの活動ログを集計しています（「自分のみ／全員」の切替とは独立し、常に全ユーザーを並べます）。
+              で各営業担当の活動ログを集計しています（「自分のみ／全員」の切替とは独立し、営業・売上に含めるユーザーのみ並べます）。
             </p>
             <div className="user-compare-tablist" role="tablist" aria-label="比較する項目">
               {userCompareTabs.map((tab) => (
@@ -2226,7 +2229,7 @@ function DashboardApp({
             </div>
             <div className="chart-wrap user-compare-chart">
               {isLeadSourcesCompareTab(userCompareTab) ? (
-                users.length === 0 ? (
+                salesUsers.length === 0 ? (
                   <div className="chart-placeholder">ユーザーがありません</div>
                 ) : (
                   <ResponsiveContainer width="100%" height={320}>
@@ -2333,7 +2336,7 @@ function DashboardApp({
       ) : pageTab === 'targets' ? (
         <TargetsTab
           targets={approachTargets}
-          users={users}
+          users={salesUsers}
           sessionUserId={sessionUserId}
           dataViewUserIds={dataViewUserIds}
           setState={setState}
@@ -2344,7 +2347,7 @@ function DashboardApp({
       ) : pageTab === 'invoices' ? (
         <InvoicesTab
           invoices={invoices}
-          users={users}
+          users={salesUsers}
           sessionUserId={sessionUserId}
           dataViewUserIds={dataViewUserIds}
           setState={setState}
@@ -2356,7 +2359,7 @@ function DashboardApp({
       ) : pageTab === 'estimates' ? (
         <EstimateTasksTab
           estimateTasks={estimateTasks}
-          users={users}
+          users={salesUsers}
           sessionUserId={sessionUserId}
           dataViewUserIds={dataViewUserIds}
           setState={setState}

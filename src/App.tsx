@@ -82,6 +82,12 @@ import {
   leadStackLabel,
   tabValueForUser,
 } from './userCompareMetrics'
+import {
+  CLOUD_AUTO_SAVE_DEBOUNCE_MS,
+  persistAppStateToCloud,
+  stateJsonFingerprint,
+  type CloudSaveStatus,
+} from './cloud/autoSave'
 import { mergeActivityCsvIntoState, parseStateJson, stateToJson } from './stateJson'
 import {
   clearStorage,
@@ -89,7 +95,7 @@ import {
   sampleState,
   saveState,
 } from './storage'
-import { fetchSharedAppState, upsertSharedAppState } from './cloud/sharedAppState'
+import { fetchSharedAppState } from './cloud/sharedAppState'
 import { isSupabaseConfigured } from './supabaseClient'
 import { useAuth } from './auth/AuthContext'
 import { CloudLoginScreen } from './auth/CloudLoginScreen'
@@ -142,8 +148,6 @@ function clampDashboardYm(value: string, maxYm: string): string {
   return value
 }
 
-type CloudSavePhase = 'idle' | 'syncing' | 'ok' | 'error'
-
 function formatCloudSavedAt(ts: number): string {
   return new Date(ts).toLocaleString('ja-JP', {
     month: 'numeric',
@@ -160,7 +164,7 @@ function usePersistentAppState(): {
   toast: string | null
   showToast: (msg: string) => void
   dataReady: boolean
-  cloudSave: { phase: CloudSavePhase; lastOkAt: number | null }
+  cloudSave: CloudSaveStatus
   forceCloudSave: () => Promise<void>
 } {
   const auth = useAuth()
@@ -168,11 +172,17 @@ function usePersistentAppState(): {
     !isSupabaseConfigured ? initialState() : emptyState(),
   )
   const [dataReady, setDataReady] = useState(!isSupabaseConfigured)
-  const [cloudSave, setCloudSave] = useState<{
-    phase: CloudSavePhase
-    lastOkAt: number | null
-  }>({ phase: 'idle', lastOkAt: null })
+  const [cloudSave, setCloudSave] = useState<CloudSaveStatus>({
+    phase: 'idle',
+    lastOkAt: null,
+  })
   const stateRef = useRef(state)
+  const lastCloudJsonRef = useRef<string | null>(null)
+  const hydrationDoneRef = useRef(false)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const savingRef = useRef(false)
+  const lastErrorToastAtRef = useRef(0)
+
   useEffect(() => {
     stateRef.current = state
   }, [state])
@@ -186,23 +196,35 @@ function usePersistentAppState(): {
     }
     if (!auth.user?.id) {
       setDataReady(false)
+      hydrationDoneRef.current = false
+      lastCloudJsonRef.current = null
       return
     }
 
     let cancelled = false
     setDataReady(false)
+    hydrationDoneRef.current = false
+    lastCloudJsonRef.current = null
     void (async () => {
       try {
         const remote = await fetchSharedAppState()
         if (cancelled) return
-        setState(remote ?? emptyState())
+        const next = remote ?? emptyState()
+        setState(next)
+        lastCloudJsonRef.current = stateJsonFingerprint(next)
       } catch (e) {
         console.error(e)
         if (!cancelled) {
-          setState(emptyState())
+          const next = emptyState()
+          setState(next)
+          lastCloudJsonRef.current = stateJsonFingerprint(next)
         }
       } finally {
-        if (!cancelled) setDataReady(true)
+        if (!cancelled) {
+          hydrationDoneRef.current = true
+          setDataReady(true)
+          setCloudSave({ phase: 'ok', lastOkAt: Date.now() })
+        }
       }
     })()
 
@@ -213,51 +235,116 @@ function usePersistentAppState(): {
 
   const [toast, setToast] = useState<string | null>(null)
 
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(null), 3200)
+  }, [])
+
+  const runCloudSave = useCallback(
+    async (snap: AppState, opts?: { fromAuto?: boolean }) => {
+      if (!auth.configured || !auth.user?.id) return
+      if (savingRef.current) return
+      const json = stateJsonFingerprint(snap)
+      if (lastCloudJsonRef.current === json) {
+        setCloudSave((s) =>
+          s.phase === 'pending' ? { ...s, phase: 'ok' } : s,
+        )
+        return
+      }
+      savingRef.current = true
+      setCloudSave((s) => ({ ...s, phase: 'syncing' }))
+      try {
+        await persistAppStateToCloud(snap)
+        lastCloudJsonRef.current = json
+        setCloudSave({ phase: 'ok', lastOkAt: Date.now() })
+      } catch (e) {
+        console.error(e)
+        setCloudSave((s) => ({ phase: 'error', lastOkAt: s.lastOkAt }))
+        if (opts?.fromAuto) {
+          const now = Date.now()
+          if (now - lastErrorToastAtRef.current > 12_000) {
+            lastErrorToastAtRef.current = now
+            showToast('自動保存に失敗しました。ネットワークを確認し「今すぐ保存」を押してください')
+          }
+        } else {
+          showToast('クラウド保存に失敗しました')
+        }
+        throw e
+      } finally {
+        savingRef.current = false
+      }
+    },
+    [auth.configured, auth.user?.id, showToast],
+  )
+
+  const flushCloudSave = useCallback(() => {
+    if (saveTimerRef.current != null) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    void runCloudSave(stateRef.current, { fromAuto: true })
+  }, [runCloudSave])
+
   useEffect(() => {
     if (!dataReady) return
     if (!auth.configured) {
       saveState(state)
       return
     }
-    if (!auth.user?.id) return
-    let cancelled = false
-    const id = window.setTimeout(() => {
-      if (cancelled) return
-      setCloudSave((s) => ({ ...s, phase: 'syncing' }))
-      void upsertSharedAppState(state).then(
-        () => {
-          if (!cancelled) setCloudSave({ phase: 'ok', lastOkAt: Date.now() })
-        },
-        (err) => {
-          console.error(err)
-          if (!cancelled) setCloudSave((s) => ({ phase: 'error', lastOkAt: s.lastOkAt }))
-        },
-      )
-    }, 900)
-    return () => {
-      cancelled = true
-      window.clearTimeout(id)
-    }
-  }, [state, dataReady, auth.configured, auth.user?.id])
+    if (!auth.user?.id || !hydrationDoneRef.current) return
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg)
-    window.setTimeout(() => setToast(null), 3200)
-  }, [])
+    saveState(state)
+    const json = stateJsonFingerprint(state)
+    if (lastCloudJsonRef.current === json) return
+
+    if (saveTimerRef.current != null) {
+      clearTimeout(saveTimerRef.current)
+    }
+    setCloudSave((s) =>
+      s.phase === 'syncing' ? s : { ...s, phase: 'pending' },
+    )
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null
+      void runCloudSave(stateRef.current, { fromAuto: true })
+    }, CLOUD_AUTO_SAVE_DEBOUNCE_MS)
+
+    return () => {
+      if (saveTimerRef.current != null) {
+        clearTimeout(saveTimerRef.current)
+        saveTimerRef.current = null
+      }
+    }
+  }, [state, dataReady, auth.configured, auth.user?.id, runCloudSave])
+
+  useEffect(() => {
+    if (!auth.configured || !auth.user?.id) return
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushCloudSave()
+    }
+    const onPageHide = () => flushCloudSave()
+
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', onPageHide)
+    }
+  }, [auth.configured, auth.user?.id, flushCloudSave])
 
   const forceCloudSave = useCallback(async () => {
     if (!auth.configured || !auth.user?.id) return
-    setCloudSave((s) => ({ ...s, phase: 'syncing' }))
-    try {
-      await upsertSharedAppState(stateRef.current)
-      setCloudSave({ phase: 'ok', lastOkAt: Date.now() })
-      showToast('クラウドへ保存しました')
-    } catch (e) {
-      console.error(e)
-      setCloudSave((s) => ({ phase: 'error', lastOkAt: s.lastOkAt }))
-      showToast('クラウド保存に失敗しました')
+    if (saveTimerRef.current != null) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
     }
-  }, [auth.configured, auth.user?.id, showToast])
+    try {
+      await runCloudSave(stateRef.current)
+      showToast('クラウドへ保存しました')
+    } catch {
+      /* runCloudSave がトースト表示済み */
+    }
+  }, [auth.configured, auth.user?.id, runCloudSave, showToast])
 
   return { state, setState, toast, showToast, dataReady, cloudSave, forceCloudSave }
 }
@@ -279,7 +366,7 @@ function DashboardApp({
   setState: Dispatch<SetStateAction<AppState>>
   toast: string | null
   showToast: (msg: string) => void
-  cloudSave: { phase: CloudSavePhase; lastOkAt: number | null }
+  cloudSave: CloudSaveStatus
   forceCloudSave: () => Promise<void>
 }) {
   const auth = useAuth()
@@ -1154,19 +1241,21 @@ function DashboardApp({
                 className={`header-cloud-sync${
                   cloudSave.phase === 'error' ? ' header-cloud-sync-error' : ''
                 }`}
-                title="自動保存は操作の約0.9秒後に実行されます"
+                title="編集後は約0.9秒で自動保存。タブを閉じる直前にも保存します。"
               >
-                {cloudSave.phase === 'syncing'
-                  ? 'クラウド保存中…'
-                  : cloudSave.phase === 'error'
-                    ? `前回の自動保存に失敗${
-                        cloudSave.lastOkAt != null
-                          ? `（最終成功 ${formatCloudSavedAt(cloudSave.lastOkAt)}）`
-                          : ''
-                      }`
-                    : cloudSave.lastOkAt != null
-                      ? `最終保存 ${formatCloudSavedAt(cloudSave.lastOkAt)}`
-                      : 'クラウド未保存（編集すると自動保存）'}
+                {cloudSave.phase === 'pending'
+                  ? '自動保存待ち…'
+                  : cloudSave.phase === 'syncing'
+                    ? '自動保存中…'
+                    : cloudSave.phase === 'error'
+                      ? `自動保存に失敗${
+                          cloudSave.lastOkAt != null
+                            ? `（最終成功 ${formatCloudSavedAt(cloudSave.lastOkAt)}）`
+                            : ''
+                        }`
+                      : cloudSave.lastOkAt != null
+                        ? `自動保存済 ${formatCloudSavedAt(cloudSave.lastOkAt)}`
+                        : '自動保存します（編集すると反映）'}
               </span>
               <button
                 type="button"
@@ -2236,8 +2325,8 @@ function DashboardApp({
             <p>
               {auth.configured ? (
                 <>
-                  ログイン中のデータは <strong>Supabase</strong> に保存されます（画面操作の約0.9秒後に自動同期）。
-                  ヘッダーの <strong>今すぐ保存</strong> で待たずに反映できます。バックアップ用に{' '}
+                  ログイン中のデータは <strong>Supabase</strong> に<strong>自動保存</strong>されます（編集の約0.9秒後。タブを閉じる直前も保存）。
+                  すぐ反映したいときは <strong>今すぐ保存</strong> を押してください。端末にはバックアップ用に{' '}
                   <strong>全状態JSON</strong> の書き出しも利用できます。
                 </>
               ) : (
